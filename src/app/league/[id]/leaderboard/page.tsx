@@ -106,8 +106,8 @@ export default async function LeaderboardPage({ params }: PageProps) {
   // Compute score for each member
   const playerScores = (members ?? []).map((member) => {
     const playerId = member.player_id;
-    const displayName =
-      (member.profiles as Record<string, unknown>)?.display_name ?? "Unknown Player";
+    const profileData = member.profiles as unknown as { display_name: string } | null;
+    const displayName: string = profileData?.display_name ?? "Unknown Player";
 
     const assignments: TeamAssignment[] = (allAssignmentsRaw ?? [])
       .filter((a) => a.player_id === playerId)

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest --run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "validate": "npm run test && npm run lint && npm run build"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
