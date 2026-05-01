@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import AppShell from "@/components/app-shell";
+import { getLeagueNavLinks } from "@/components/league-nav";
 import DraftRoom from "@/components/draft-room";
 import { generateSnakeOrder } from "@/lib/draft";
 
@@ -87,17 +88,12 @@ export default async function DraftRoomPage({
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-4 py-3 flex items-center gap-3">
-        <Link
-          href="/dashboard"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Dashboard
-        </Link>
-        <h1 className="text-lg font-semibold">Draft Room — {league.name}</h1>
-      </header>
-
+    <AppShell
+      title={`Draft Room — ${league.name}`}
+      backHref="/dashboard"
+      backLabel="Dashboard"
+      navLinks={getLeagueNavLinks(leagueId)}
+    >
       <DraftRoom
         leagueId={leagueId}
         currentUserId={user.id}
@@ -114,6 +110,6 @@ export default async function DraftRoomPage({
         pickTimerSeconds={league.pick_timer_seconds ?? 90}
         rosterSize={league.roster_size}
       />
-    </div>
+    </AppShell>
   );
 }

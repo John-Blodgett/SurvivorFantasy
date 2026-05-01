@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { computePlayerScore } from "@/lib/scoring";
 import type {
   TeamAssignment,
@@ -9,12 +8,16 @@ import type {
   FinalizedEpisode,
   ChallengeSubmission,
 } from "@/lib/scoring";
+import AppShell from "@/components/app-shell";
+import { getLeagueNavLinks } from "@/components/league-nav";
+import TradeProposalForm from "@/components/trade-proposal-form";
 
 interface PageProps {
   params: { id: string; userId: string };
+  searchParams: { error?: string; success?: string };
 }
 
-export default async function TeamPage({ params }: PageProps) {
+export default async function TeamPage({ params, searchParams }: PageProps) {
   const supabase = createClient();
   const {
     data: { user },
@@ -168,23 +171,37 @@ export default async function TeamPage({ params }: PageProps) {
   const isOwnTeam = user.id === targetUserId;
   const displayName = targetProfile?.display_name ?? "Unknown Player";
 
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-4 py-3 flex items-center gap-3">
-        <Link
-          href={`/league/${leagueId}/leaderboard`}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Leaderboard
-        </Link>
-        <h1 className="text-lg font-semibold">
-          {isOwnTeam ? "My Team" : `${displayName}'s Team`} — {league.name}
-        </h1>
-      </header>
+  // Fetch the current user's team assignments for trade proposal (only if viewing another player)
+  let myActiveCastaways: { id: string; name: string; tribe: string | null; is_eliminated: boolean }[] = [];
+  if (!isOwnTeam) {
+    const { data: myAssignments } = await supabase
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", user.id);
 
-      <main className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
+    const myCastawayIds = (myAssignments ?? []).map((a) => a.castaway_id);
+    myActiveCastaways = allCastaways
+      .filter((c) => myCastawayIds.includes(c.id) && !c.is_eliminated)
+      .map((c) => ({ id: c.id, name: c.name, tribe: c.tribe, is_eliminated: c.is_eliminated }));
+  }
+
+  // Active castaways on the target player's team (for trade form)
+  const theirActiveCastaways = activeCastaways
+    .map((id) => castawayMap.get(id))
+    .filter((c): c is NonNullable<typeof c> => c != null && !c.is_eliminated)
+    .map((c) => ({ id: c.id, name: c.name, tribe: c.tribe, is_eliminated: c.is_eliminated }));
+
+  return (
+    <AppShell
+      title={isOwnTeam ? `My Team — ${league.name}` : `${displayName}'s Team — ${league.name}`}
+      backHref={`/league/${leagueId}/leaderboard`}
+      backLabel="Leaderboard"
+      navLinks={getLeagueNavLinks(leagueId)}
+    >
+      <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
         {/* Summary header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <p className="text-sm text-muted-foreground">
               {displayName} &middot; Season {league.season_number}
@@ -196,11 +213,39 @@ export default async function TeamPage({ params }: PageProps) {
               </span>
             </p>
           </div>
-          <div className="text-right text-sm text-muted-foreground space-y-0.5">
+          <div className="text-left sm:text-right text-sm text-muted-foreground space-y-0.5">
             <p>{teamCastawayIds.length} castaways</p>
             <p>{finalizedEpisodes.length} episodes scored</p>
           </div>
         </div>
+
+        {/* Trade toast messages */}
+        {searchParams.success === "trade_proposed" && (
+          <p
+            role="status"
+            className="text-sm bg-green-50 text-green-800 border border-green-200 rounded-md px-3 py-2"
+          >
+            Trade proposal sent!
+          </p>
+        )}
+        {searchParams.error && (
+          <p
+            role="alert"
+            className="text-sm bg-red-50 text-red-800 border border-red-200 rounded-md px-3 py-2"
+          >
+            {searchParams.error}
+          </p>
+        )}
+
+        {/* Trade proposal form (only when viewing another player's team) */}
+        {!isOwnTeam && (
+          <TradeProposalForm
+            leagueId={leagueId}
+            receiverId={targetUserId}
+            myActiveCastaways={myActiveCastaways}
+            theirActiveCastaways={theirActiveCastaways}
+          />
+        )}
 
         {teamCastawayIds.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
@@ -216,7 +261,7 @@ export default async function TeamPage({ params }: PageProps) {
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Active Castaways
                 </h2>
-                <div className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-2">
                   {activeCastaways.map((castawayId) => {
                     const castaway = castawayMap.get(castawayId);
                     const assignment = assignments.find(
@@ -246,7 +291,7 @@ export default async function TeamPage({ params }: PageProps) {
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Eliminated Castaways
                 </h2>
-                <div className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-2">
                   {eliminatedOnTeam.map((castawayId) => {
                     const castaway = castawayMap.get(castawayId);
                     const assignment = assignments.find(
@@ -283,8 +328,8 @@ export default async function TeamPage({ params }: PageProps) {
             )}
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

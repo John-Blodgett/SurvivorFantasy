@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { computePlayerScore } from "@/lib/scoring";
 import { computeLeaderboard } from "@/lib/leaderboard";
+import AppShell from "@/components/app-shell";
+import { getLeagueNavLinks } from "@/components/league-nav";
 import type {
   TeamAssignment,
   EpisodeEvent,
@@ -143,20 +145,13 @@ export default async function LeaderboardPage({ params }: PageProps) {
   const leaderboard = computeLeaderboard(playerScores);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-4 py-3 flex items-center gap-3">
-        <Link
-          href="/dashboard"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Dashboard
-        </Link>
-        <h1 className="text-lg font-semibold">
-          {league.name} — Leaderboard
-        </h1>
-      </header>
-
-      <main className="p-6 max-w-2xl mx-auto space-y-4">
+    <AppShell
+      title={`${league.name} — Leaderboard`}
+      backHref="/dashboard"
+      backLabel="Dashboard"
+      navLinks={getLeagueNavLinks(leagueId)}
+    >
+      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <p className="text-sm text-muted-foreground">
           Season {league.season_number} &middot;{" "}
           {finalizedEpisodes.length} episode
@@ -174,13 +169,16 @@ export default async function LeaderboardPage({ params }: PageProps) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground w-12">
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-muted-foreground w-12">
                     Rank
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                  <th className="px-3 sm:px-4 py-3 text-left font-medium text-muted-foreground">
                     Player
                   </th>
-                  <th className="px-4 py-3 text-right font-medium text-muted-foreground w-24">
+                  <th className="hidden lg:table-cell px-3 sm:px-4 py-3 text-left font-medium text-muted-foreground w-48">
+                    Progress
+                  </th>
+                  <th className="px-3 sm:px-4 py-3 text-right font-medium text-muted-foreground w-24">
                     Points
                   </th>
                 </tr>
@@ -188,6 +186,8 @@ export default async function LeaderboardPage({ params }: PageProps) {
               <tbody>
                 {leaderboard.map((entry) => {
                   const isCurrentUser = entry.player_id === user.id;
+                  const maxPoints = leaderboard[0]?.total || 1;
+                  const barWidth = maxPoints > 0 ? Math.round((entry.total / maxPoints) * 100) : 0;
                   return (
                     <tr
                       key={entry.player_id}
@@ -195,13 +195,13 @@ export default async function LeaderboardPage({ params }: PageProps) {
                         isCurrentUser ? "bg-primary/5" : ""
                       }`}
                     >
-                      <td className="px-4 py-3 tabular-nums font-semibold text-muted-foreground">
+                      <td className="px-3 sm:px-4 py-3 tabular-nums font-semibold text-muted-foreground">
                         {entry.rank}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 sm:px-4 py-3">
                         <Link
                           href={`/league/${leagueId}/team/${entry.player_id}`}
-                          className="font-medium hover:underline"
+                          className="font-medium hover:underline min-h-[44px] flex items-center"
                         >
                           {entry.display_name}
                           {isCurrentUser && (
@@ -211,7 +211,15 @@ export default async function LeaderboardPage({ params }: PageProps) {
                           )}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                      <td className="hidden lg:table-cell px-3 sm:px-4 py-3">
+                        <div className="w-full bg-muted rounded-full h-2.5">
+                          <div
+                            className="bg-primary h-2.5 rounded-full transition-all"
+                            style={{ width: `${barWidth}%` }}
+                          />
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-4 py-3 text-right tabular-nums font-semibold">
                         {entry.total}
                       </td>
                     </tr>
@@ -221,7 +229,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
             </table>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

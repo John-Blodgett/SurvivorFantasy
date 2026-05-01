@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { buildConsolationEvents } from "@/lib/episodes";
+import { validateCreateChallenge } from "@/lib/challenges";
 
 /** Returns the league where the current user is admin, or redirects. */
 async function getAdminLeague() {
@@ -261,4 +262,189 @@ export async function unfinalizeEpisodeAction(formData: FormData) {
 
   revalidatePath(`/admin/episode/${episodeNumber}`);
   redirect(`/admin/episode/${episodeNumber}?success=unfinalized`);
+}
+
+
+/** Create a weekly challenge for an episode. Requirements: 9.1 */
+export async function createChallengeAction(formData: FormData) {
+  const { supabase, league } = await getAdminLeague();
+
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const points = parseInt(formData.get("points") as string, 10);
+  const deadline = formData.get("deadline") as string;
+
+  const validation = validateCreateChallenge({ title, description, points, deadline });
+  if (!validation.valid) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(validation.error!)}`
+    );
+  }
+
+  const episodeId = await ensureEpisode(supabase, league.id, episodeNumber);
+
+  const { error } = await supabase.from("challenges").insert({
+    league_id: league.id,
+    episode_id: episodeId,
+    title: title.trim(),
+    description: description?.trim() || null,
+    points,
+    deadline,
+  });
+
+  if (error) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(
+        "Failed to create challenge."
+      )}`
+    );
+  }
+
+  revalidatePath(`/admin/episode/${episodeNumber}`);
+}
+
+/** Update a weekly challenge. Requirements: 9.7 */
+export async function updateChallengeAction(formData: FormData) {
+  const { supabase, league } = await getAdminLeague();
+
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const challengeId = formData.get("challenge_id") as string;
+  const title = formData.get("title") as string;
+  const description = formData.get("description") as string;
+  const points = parseInt(formData.get("points") as string, 10);
+  const deadline = formData.get("deadline") as string;
+
+  const validation = validateCreateChallenge({ title, description, points, deadline });
+  if (!validation.valid) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(validation.error!)}`
+    );
+  }
+
+  // Verify challenge belongs to this league and deadline hasn't passed
+  const { data: challenge } = await supabase
+    .from("challenges")
+    .select("id, deadline, league_id")
+    .eq("id", challengeId)
+    .single();
+
+  if (!challenge || challenge.league_id !== league.id) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent("Challenge not found.")}`
+    );
+  }
+
+  if (new Date(challenge.deadline) < new Date()) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(
+        "Cannot edit a challenge after its deadline has passed."
+      )}`
+    );
+  }
+
+  const { error } = await supabase
+    .from("challenges")
+    .update({
+      title: title.trim(),
+      description: description?.trim() || null,
+      points,
+      deadline,
+    })
+    .eq("id", challengeId);
+
+  if (error) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(
+        "Failed to update challenge."
+      )}`
+    );
+  }
+
+  revalidatePath(`/admin/episode/${episodeNumber}`);
+}
+
+/** Delete a weekly challenge. Requirements: 9.7 */
+export async function deleteChallengeAction(formData: FormData) {
+  const { supabase, league } = await getAdminLeague();
+
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const challengeId = formData.get("challenge_id") as string;
+
+  // Verify challenge belongs to this league and deadline hasn't passed
+  const { data: challenge } = await supabase
+    .from("challenges")
+    .select("id, deadline, league_id")
+    .eq("id", challengeId)
+    .single();
+
+  if (!challenge || challenge.league_id !== league.id) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent("Challenge not found.")}`
+    );
+  }
+
+  if (new Date(challenge.deadline) < new Date()) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(
+        "Cannot delete a challenge after its deadline has passed."
+      )}`
+    );
+  }
+
+  const { error } = await supabase
+    .from("challenges")
+    .delete()
+    .eq("id", challengeId);
+
+  if (error) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(
+        "Failed to delete challenge."
+      )}`
+    );
+  }
+
+  revalidatePath(`/admin/episode/${episodeNumber}`);
+}
+
+/** Mark a challenge submission as correct or incorrect. Requirements: 9.4 */
+export async function gradeChallengeSubmissionAction(formData: FormData) {
+  const { supabase, league } = await getAdminLeague();
+
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const submissionId = formData.get("submission_id") as string;
+  const isCorrect = formData.get("is_correct") === "true";
+
+  // Verify submission belongs to a challenge in this league
+  const { data: submission } = await supabase
+    .from("challenge_submissions")
+    .select("id, challenge_id, challenges!inner(league_id)")
+    .eq("id", submissionId)
+    .single();
+
+  const challengeData = submission?.challenges as unknown as { league_id: string } | null;
+
+  if (!submission || !challengeData || challengeData.league_id !== league.id) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(
+        "Submission not found."
+      )}`
+    );
+  }
+
+  const { error } = await supabase
+    .from("challenge_submissions")
+    .update({ is_correct: isCorrect })
+    .eq("id", submissionId);
+
+  if (error) {
+    redirect(
+      `/admin/episode/${episodeNumber}?error=${encodeURIComponent(
+        "Failed to grade submission."
+      )}`
+    );
+  }
+
+  revalidatePath(`/admin/episode/${episodeNumber}`);
 }

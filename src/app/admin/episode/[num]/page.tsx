@@ -1,15 +1,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import Link from "next/link";
+import AppShell from "@/components/app-shell";
 import {
   removeEpisodeEventAction,
   finalizeEpisodeAction,
   unfinalizeEpisodeAction,
+  createChallengeAction,
+  updateChallengeAction,
+  deleteChallengeAction,
+  gradeChallengeSubmissionAction,
 } from "./actions";
 import EpisodeScorerForm from "@/components/episode-scorer-form";
 import type { Castaway } from "@/lib/castaways";
 import type { ScoringRule } from "@/lib/scoring-rules";
 import type { EpisodeEvent } from "@/lib/episodes";
+import type { Challenge, ChallengeSubmission } from "@/lib/challenges";
 
 interface PageProps {
   params: { num: string };
@@ -90,6 +95,40 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
   const allCastaways: Castaway[] = activeCastaways ?? [];
   const allRules: ScoringRule[] = rules ?? [];
 
+  // Fetch challenges for this episode
+  let challenges: Challenge[] = [];
+  let challengeSubmissions: Array<ChallengeSubmission & { player_name: string }> = [];
+
+  if (episode) {
+    const { data: rawChallenges } = await supabase
+      .from("challenges")
+      .select("*")
+      .eq("episode_id", episode.id)
+      .order("created_at", { ascending: true });
+
+    challenges = (rawChallenges ?? []) as Challenge[];
+
+    // Fetch all submissions for challenges in this episode
+    if (challenges.length > 0) {
+      const challengeIds = challenges.map((c) => c.id);
+      const { data: rawSubmissions } = await supabase
+        .from("challenge_submissions")
+        .select("*, profiles(display_name)")
+        .in("challenge_id", challengeIds)
+        .order("submitted_at", { ascending: true });
+
+      challengeSubmissions = (rawSubmissions ?? []).map((s: Record<string, unknown>) => ({
+        id: s.id as string,
+        challenge_id: s.challenge_id as string,
+        player_id: s.player_id as string,
+        response: s.response as string,
+        is_correct: s.is_correct as boolean | null,
+        submitted_at: s.submitted_at as string,
+        player_name: (s.profiles as Record<string, unknown> | null)?.display_name as string ?? "Unknown",
+      }));
+    }
+  }
+
   // Separate regular events from consolation events (consolation have no scoring_rule_id)
   const regularEvents = events.filter((e) => e.scoring_rule_id !== null);
   const consolationEvents = events.filter((e) => e.scoring_rule_id === null);
@@ -102,25 +141,13 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
       : null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-4 py-3 flex items-center gap-3">
-        <Link
-          href="/dashboard"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Dashboard
-        </Link>
-        <h1 className="text-lg font-semibold">
-          Episode {episodeNumber} — {league.name}
-        </h1>
-        {isFinalized && (
-          <span className="ml-auto text-xs font-medium rounded px-2 py-0.5 bg-green-100 text-green-800">
-            Finalized
-          </span>
-        )}
-      </header>
-
-      <main className="p-4 max-w-3xl mx-auto space-y-6">
+    <AppShell
+      title={`Episode ${episodeNumber} — ${league.name}`}
+      backHref="/dashboard"
+      backLabel="Dashboard"
+      badge={isFinalized ? "Finalized" : undefined}
+    >
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
         {searchParams.error && (
           <p
             role="alert"
@@ -234,8 +261,110 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
             </ul>
           </section>
         )}
-      </main>
-    </div>
+
+        {/* Weekly Challenges Section */}
+        <section aria-labelledby="challenges-heading">
+          <h2 id="challenges-heading" className="text-base font-semibold mb-3">
+            Weekly Challenges
+          </h2>
+
+          {/* Challenge creation form */}
+          <details className="rounded-lg border border-border bg-card mb-4">
+            <summary className="px-4 py-3 text-sm font-medium cursor-pointer hover:bg-muted/50">
+              + Create New Challenge
+            </summary>
+            <form action={createChallengeAction} className="p-4 pt-0 space-y-3">
+              <input type="hidden" name="episode_number" value={episodeNumber} />
+              <div>
+                <label htmlFor="challenge-title" className="text-sm font-medium">
+                  Title
+                </label>
+                <input
+                  id="challenge-title"
+                  name="title"
+                  type="text"
+                  required
+                  className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                  placeholder="e.g. Who will win immunity?"
+                />
+              </div>
+              <div>
+                <label htmlFor="challenge-description" className="text-sm font-medium">
+                  Description
+                </label>
+                <textarea
+                  id="challenge-description"
+                  name="description"
+                  className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                  rows={2}
+                  placeholder="Optional details about the challenge"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="challenge-points" className="text-sm font-medium">
+                    Points
+                  </label>
+                  <input
+                    id="challenge-points"
+                    name="points"
+                    type="number"
+                    min="1"
+                    required
+                    className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="5"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="challenge-deadline" className="text-sm font-medium">
+                    Deadline
+                  </label>
+                  <input
+                    id="challenge-deadline"
+                    name="deadline"
+                    type="datetime-local"
+                    required
+                    className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
+              >
+                Create Challenge
+              </button>
+            </form>
+          </details>
+
+          {/* Existing challenges list */}
+          {challenges.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No challenges for this episode yet.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {challenges.map((challenge) => {
+                const isPastDeadline = new Date(challenge.deadline) < new Date();
+                const submissions = challengeSubmissions.filter(
+                  (s) => s.challenge_id === challenge.id
+                );
+
+                return (
+                  <ChallengeCard
+                    key={challenge.id}
+                    challenge={challenge}
+                    isPastDeadline={isPastDeadline}
+                    submissions={submissions}
+                    episodeNumber={episodeNumber}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </div>
+    </AppShell>
   );
 }
 
@@ -286,5 +415,168 @@ function EventRow({
         </form>
       )}
     </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Challenge card with edit/delete and submission grading
+// ---------------------------------------------------------------------------
+
+function ChallengeCard({
+  challenge,
+  isPastDeadline,
+  submissions,
+  episodeNumber,
+}: {
+  challenge: Challenge;
+  isPastDeadline: boolean;
+  submissions: Array<ChallengeSubmission & { player_name: string }>;
+  episodeNumber: number;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold">{challenge.title}</h3>
+          {challenge.description && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {challenge.description}
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {challenge.points} pts · Deadline:{" "}
+            {new Date(challenge.deadline).toLocaleString()}
+            {isPastDeadline && (
+              <span className="ml-2 text-amber-600 font-medium">Past deadline</span>
+            )}
+          </p>
+        </div>
+
+        {/* Edit/Delete only before deadline */}
+        {!isPastDeadline && (
+          <div className="flex gap-1 shrink-0">
+            <details className="relative">
+              <summary className="rounded border border-input px-2 py-1 text-xs cursor-pointer hover:bg-muted">
+                Edit
+              </summary>
+              <div className="absolute right-0 top-full mt-1 z-10 w-72 rounded-lg border border-border bg-card p-3 shadow-lg">
+                <form action={updateChallengeAction} className="space-y-2">
+                  <input type="hidden" name="episode_number" value={episodeNumber} />
+                  <input type="hidden" name="challenge_id" value={challenge.id} />
+                  <input
+                    name="title"
+                    type="text"
+                    defaultValue={challenge.title}
+                    required
+                    className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                  />
+                  <textarea
+                    name="description"
+                    defaultValue={challenge.description ?? ""}
+                    className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                    rows={2}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      name="points"
+                      type="number"
+                      min="1"
+                      defaultValue={challenge.points}
+                      required
+                      className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                    />
+                    <input
+                      name="deadline"
+                      type="datetime-local"
+                      defaultValue={challenge.deadline.slice(0, 16)}
+                      required
+                      className="w-full rounded border border-input bg-background px-2 py-1 text-sm"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="rounded bg-primary text-primary-foreground px-3 py-1 text-xs font-medium"
+                  >
+                    Save
+                  </button>
+                </form>
+              </div>
+            </details>
+            <form action={deleteChallengeAction}>
+              <input type="hidden" name="episode_number" value={episodeNumber} />
+              <input type="hidden" name="challenge_id" value={challenge.id} />
+              <button
+                type="submit"
+                className="rounded border border-destructive text-destructive px-2 py-1 text-xs hover:bg-destructive/10"
+              >
+                Delete
+              </button>
+            </form>
+          </div>
+        )}
+      </div>
+
+      {/* Submissions grading */}
+      {submissions.length > 0 && (
+        <div className="border-t border-border pt-3">
+          <p className="text-xs font-medium mb-2">
+            Submissions ({submissions.length})
+          </p>
+          <ul className="space-y-2">
+            {submissions.map((sub) => (
+              <li
+                key={sub.id}
+                className="flex items-center gap-3 rounded border border-border px-3 py-2"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{sub.player_name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {sub.response}
+                  </p>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <form action={gradeChallengeSubmissionAction}>
+                    <input type="hidden" name="episode_number" value={episodeNumber} />
+                    <input type="hidden" name="submission_id" value={sub.id} />
+                    <input type="hidden" name="is_correct" value="true" />
+                    <button
+                      type="submit"
+                      className={`rounded px-2 py-1 text-xs font-medium min-h-[28px] ${
+                        sub.is_correct === true
+                          ? "bg-green-100 text-green-800 border border-green-300"
+                          : "border border-input hover:bg-green-50 text-muted-foreground"
+                      }`}
+                    >
+                      ✓
+                    </button>
+                  </form>
+                  <form action={gradeChallengeSubmissionAction}>
+                    <input type="hidden" name="episode_number" value={episodeNumber} />
+                    <input type="hidden" name="submission_id" value={sub.id} />
+                    <input type="hidden" name="is_correct" value="false" />
+                    <button
+                      type="submit"
+                      className={`rounded px-2 py-1 text-xs font-medium min-h-[28px] ${
+                        sub.is_correct === false
+                          ? "bg-red-100 text-red-800 border border-red-300"
+                          : "border border-input hover:bg-red-50 text-muted-foreground"
+                      }`}
+                    >
+                      ✗
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {submissions.length === 0 && isPastDeadline && (
+        <p className="text-xs text-muted-foreground border-t border-border pt-2">
+          No submissions received.
+        </p>
+      )}
+    </div>
   );
 }

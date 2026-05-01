@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import AppShell from "@/components/app-shell";
 import { configureDraftAction, startDraftAction } from "./actions";
 
 interface SearchParams {
@@ -63,18 +64,8 @@ export default async function AdminDraftPage({
       : null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-4 py-3 flex items-center gap-3">
-        <Link
-          href="/dashboard"
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← Dashboard
-        </Link>
-        <h1 className="text-lg font-semibold">Draft — {league.name}</h1>
-      </header>
-
-      <main className="p-6 max-w-2xl mx-auto space-y-8">
+    <AppShell title={`Draft — ${league.name}`} backHref="/dashboard" backLabel="Dashboard">
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {searchParams.error && (
           <p
             role="alert"
@@ -251,8 +242,8 @@ export default async function AdminDraftPage({
             </div>
           </section>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
 

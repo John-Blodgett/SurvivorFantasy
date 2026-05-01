@@ -10,7 +10,7 @@
 export interface TeamAssignment {
   castaway_id: string;
   points_from_episode: number; // only count events from episodes >= this number
-  source: "draft" | "admin_assign" | "trade";
+  source: "draft" | "admin_assign" | "trade" | "waiver";
 }
 
 export interface EpisodeEvent {

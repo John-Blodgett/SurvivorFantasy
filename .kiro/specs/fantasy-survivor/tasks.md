@@ -167,115 +167,115 @@ Build the Fantasy Survivor web app incrementally, starting with the project foun
 - [x] 14. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 15. Implement trades
-  - [ ] 15.1 Build trade proposal UI
+- [x] 15. Implement trades
+  - [x] 15.1 Build trade proposal UI
     - On a player's team page, allow the viewing player to propose a trade (select one of their castaways, select one of the other player's castaways)
     - Validate: both castaways must be active (not eliminated), must be 1-for-1
     - Insert into `trades` with status 'pending', notify receiver via in-app notification
     - _Requirements: 13.1, 13.2, 13.6_
-  - [ ] 15.2 Write property test for eliminated castaway trade rejection
+  - [x] 15.2 Write property test for eliminated castaway trade rejection
     - **Property 9: Eliminated castaways cannot be traded**
     - **Validates: Requirements 13.6**
-  - [ ] 15.3 Build trade acceptance and admin approval flow
+  - [x] 15.3 Build trade acceptance and admin approval flow
     - Receiver sees pending trade on their dashboard, can accept or reject
     - On acceptance, trade moves to 'accepted', admin sees it in `/admin/trades` queue
     - Admin approves → status becomes 'admin_approved', team_assignments are updated with new `points_from_episode` cutoff
     - _Requirements: 13.2, 13.3, 13.7_
-  - [ ] 15.4 Write property test for trade point cutoff
+  - [x] 15.4 Write property test for trade point cutoff
     - **Property 5: Trade point cutoff is respected for both sides**
     - **Validates: Requirements 13.3, 13.4, 13.5**
 
-- [ ] 16. Implement late-join admin assignment
-  - [ ] 16.1 Build late-join assignment UI in admin
+- [x] 16. Implement late-join admin assignment
+  - [x] 16.1 Build late-join assignment UI in admin
     - In `/admin`, show players with no team assignments after draft completion
     - Allow admin to assign available castaways to those players, setting `points_from_episode` to the next unfinalized episode number
     - _Requirements: 12.1, 12.2, 12.3_
 
-- [ ] 17. Implement weekly challenges
-  - [ ] 17.1 Build challenge creation and management (`/admin/episode/[num]`)
+- [x] 17. Implement weekly challenges
+  - [x] 17.1 Build challenge creation and management (`/admin/episode/[num]`)
     - Add challenge creation form to the episode admin page (title, description, points, deadline)
     - Allow editing and deleting challenges before the deadline
     - _Requirements: 9.1, 9.7_
-  - [ ] 17.2 Build player challenge submission page (`/league/[id]/challenges`)
+  - [x] 17.2 Build player challenge submission page (`/league/[id]/challenges`)
     - List all challenges for the season with deadlines
     - Allow players to submit a text response before the deadline
     - Block submissions after the deadline
     - _Requirements: 9.2, 9.3_
-  - [ ] 17.3 Build admin challenge grading UI
+  - [x] 17.3 Build admin challenge grading UI
     - In the admin episode view, show all submissions for each challenge
     - Toggle to mark submissions as correct (awards points) or incorrect
     - _Requirements: 9.4_
-  - [ ] 17.4 Write property test for challenge deadline enforcement
+  - [x] 17.4 Write property test for challenge deadline enforcement
     - **Property: For any submission with submitted_at > challenge.deadline, the system must reject it**
     - **Validates: Requirements 9.3**
-  - [ ] 17.5 Write property test for challenge points
+  - [x] 17.5 Write property test for challenge points
     - **Property 7: Challenge points are only awarded for correct submissions**
     - **Validates: Requirements 9.4**
 
-- [ ] 18. Implement episode recap
-  - [ ] 18.1 Build episode recap page (`/league/[id]/episode/[num]`)
+- [x] 18. Implement episode recap
+  - [x] 18.1 Build episode recap page (`/league/[id]/episode/[num]`)
     - Display all episode events grouped by castaway, showing rule name, points, and benefiting player
     - _Requirements: 10.1, 10.2_
-  - [ ] 18.2 Build season summary page with episode list
+  - [x] 18.2 Build season summary page with episode list
     - List all finalized episodes in reverse chronological order, each linking to its recap
     - _Requirements: 10.3_
-  - [ ] 18.3 Write property test for episode recap completeness
+  - [x] 18.3 Write property test for episode recap completeness
     - **Property 12: Episode recap contains all and only events for that episode**
     - **Validates: Requirements 10.1, 10.2**
-  - [ ] 18.4 Write property test for episode list sort order
+  - [x] 18.4 Write property test for episode list sort order
     - **Property 13: Episode recap is sorted in reverse chronological order**
     - **Validates: Requirements 10.3**
 
-- [ ] 19. Checkpoint — Ensure all tests pass
+- [x] 19. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 20. Implement waiver wire
-  - [ ] 20.1 Add waiver wire database columns and table
+- [x] 20. Implement waiver wire
+  - [x] 20.1 Add waiver wire database columns and table
     - Add `waiver_budget`, `waiver_process_day`, `waiver_process_hour`, `waiver_process_minute` columns to `leagues`
     - Add `waiver_budget_remaining` column to `league_members`
     - Create `waiver_claims` table with all columns as defined in the design
     - _Requirements: 18.2, 18.3, 18.7_
-  - [ ] 20.2 Write waiver wire query and claim validation logic
+  - [x] 20.2 Write waiver wire query and claim validation logic
     - `getWaiverWire(leagueId)` — returns all castaways not on any team and not eliminated
     - `validateWaiverClaim(leagueId, playerId, castawayId, dropCastawayId, bidAmount)` — validates budget, drop castaway ownership, castaway availability
     - _Requirements: 18.1, 18.3, 18.10_
-  - [ ] 20.3 Write property test for waiver wire pool correctness
+  - [x] 20.3 Write property test for waiver wire pool correctness
     - **Property 17: Waiver wire contains only unowned, non-eliminated castaways**
     - **Validates: Requirements 18.1**
-  - [ ] 20.4 Write waiver claim processing logic
+  - [x] 20.4 Write waiver claim processing logic
     - `processWaiverClaims(leagueId)` — groups pending claims by castaway, resolves each group by highest bid (random tiebreak), updates `team_assignments`, deducts budget from winners, marks all claims as won/lost, sets `points_from_episode` on new assignment
     - _Requirements: 18.4, 18.5, 18.6, 18.8, 18.9_
-  - [ ] 20.5 Write property test for waiver claim winner selection
+  - [x] 20.5 Write property test for waiver claim winner selection
     - **Property 14: Waiver claim winner has highest bid**
     - **Validates: Requirements 18.4**
-  - [ ] 20.6 Write property test for waiver budget invariant
+  - [x] 20.6 Write property test for waiver budget invariant
     - **Property 15: Waiver budget is never over-spent**
     - **Property 16: Losing waiver claimants are not charged**
     - **Validates: Requirements 18.2, 18.5, 18.6**
-  - [ ] 20.7 Build waiver wire player page (`/league/[id]/waiver`)
+  - [x] 20.7 Build waiver wire player page (`/league/[id]/waiver`)
     - Display all available castaways on the waiver wire
     - Allow player to submit a claim: select castaway to claim, castaway to drop, enter bid amount
     - Show player's own remaining budget and their pending claims
     - _Requirements: 18.3, 18.12_
-  - [ ] 20.8 Build admin waiver wire panel (`/admin/waiver`)
+  - [x] 20.8 Build admin waiver wire panel (`/admin/waiver`)
     - Form to configure processing schedule (day of week, hour, minute)
     - List of all pending claims across all players
     - Button to manually trigger processing immediately
     - _Requirements: 18.7, 18.11_
 
-- [ ] 21. Checkpoint — Ensure all tests pass
+- [x] 21. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 22. Polish and responsive design
-  - [ ] 22.1 Audit all pages for mobile responsiveness
+- [x] 22. Polish and responsive design
+  - [x] 22.1 Audit all pages for mobile responsiveness
     - Ensure all touch targets are at least 44×44px on mobile
     - Test navigation on small screens, add a mobile-friendly nav menu
     - _Requirements: 17.1, 17.2_
-  - [ ] 22.2 Apply consistent visual design
+  - [x] 22.2 Apply consistent visual design
     - Apply a cohesive color scheme and typography using Tailwind and shadcn/ui tokens
     - Ensure all pages use the same layout shell, header, and navigation
     - _Requirements: 17.4, 17.5_
-  - [ ] 22.3 Desktop layout enhancements
+  - [x] 22.3 Desktop layout enhancements
     - On wide screens, use multi-column layouts for leaderboard and team breakdown
     - _Requirements: 17.3_
 
