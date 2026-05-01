@@ -105,10 +105,10 @@ export default async function TeamPage({ params }: PageProps) {
     .eq("episodes.is_finalized", true);
 
   const allEpisodeEvents: EpisodeEvent[] = (episodeEventsRaw ?? []).map(
-    (e: any) => ({
-      episode_number: e.episodes.number,
-      castaway_id: e.castaway_id,
-      points: e.points,
+    (e: Record<string, unknown>) => ({
+      episode_number: (e.episodes as Record<string, unknown>).number as number,
+      castaway_id: e.castaway_id as string,
+      points: e.points as number,
     })
   );
 
@@ -128,9 +128,9 @@ export default async function TeamPage({ params }: PageProps) {
     .eq("player_id", targetUserId);
 
   const challengeSubs: ChallengeSubmission[] = (challengeSubsRaw ?? []).map(
-    (s: any) => ({
-      points: s.challenges.points,
-      is_correct: s.is_correct,
+    (s: Record<string, unknown>) => ({
+      points: (s.challenges as Record<string, unknown>).points as number,
+      is_correct: s.is_correct as boolean,
     })
   );
 

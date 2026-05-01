@@ -74,15 +74,15 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
       .eq("episode_id", episode.id)
       .order("created_at", { ascending: false });
 
-    events = (rawEvents ?? []).map((e: any) => ({
-      id: e.id,
-      episode_id: e.episode_id,
-      castaway_id: e.castaway_id,
-      scoring_rule_id: e.scoring_rule_id,
-      points: e.points,
-      created_at: e.created_at,
-      castaway_name: e.castaways?.name ?? "Unknown",
-      rule_name: e.scoring_rules?.name ?? null,
+    events = (rawEvents ?? []).map((e: Record<string, unknown>) => ({
+      id: e.id as string,
+      episode_id: e.episode_id as string,
+      castaway_id: e.castaway_id as string,
+      scoring_rule_id: e.scoring_rule_id as string | null,
+      points: e.points as number,
+      created_at: e.created_at as string,
+      castaway_name: (e.castaways as Record<string, unknown> | null)?.name as string ?? "Unknown",
+      rule_name: (e.scoring_rules as Record<string, unknown> | null)?.name as string ?? null,
     }));
   }
 

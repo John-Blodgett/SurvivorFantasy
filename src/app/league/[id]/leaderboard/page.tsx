@@ -69,10 +69,10 @@ export default async function LeaderboardPage({ params }: PageProps) {
     .eq("episodes.is_finalized", true);
 
   const allEpisodeEvents: EpisodeEvent[] = (episodeEventsRaw ?? []).map(
-    (e: any) => ({
-      episode_number: e.episodes.number,
-      castaway_id: e.castaway_id,
-      points: e.points,
+    (e: Record<string, unknown>) => ({
+      episode_number: (e.episodes as Record<string, unknown>).number as number,
+      castaway_id: e.castaway_id as string,
+      points: e.points as number,
     })
   );
 
@@ -107,7 +107,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
   const playerScores = (members ?? []).map((member) => {
     const playerId = member.player_id;
     const displayName =
-      (member.profiles as any)?.display_name ?? "Unknown Player";
+      (member.profiles as Record<string, unknown>)?.display_name ?? "Unknown Player";
 
     const assignments: TeamAssignment[] = (allAssignmentsRaw ?? [])
       .filter((a) => a.player_id === playerId)
@@ -118,10 +118,10 @@ export default async function LeaderboardPage({ params }: PageProps) {
       }));
 
     const challengeSubs: ChallengeSubmission[] = (challengeSubsRaw ?? [])
-      .filter((s: any) => s.player_id === playerId)
-      .map((s: any) => ({
-        points: s.challenges.points,
-        is_correct: s.is_correct,
+      .filter((s: Record<string, unknown>) => s.player_id === playerId)
+      .map((s: Record<string, unknown>) => ({
+        points: (s.challenges as Record<string, unknown>).points as number,
+        is_correct: s.is_correct as boolean,
       }));
 
     const scoreResult = computePlayerScore(
@@ -186,7 +186,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
                 </tr>
               </thead>
               <tbody>
-                {leaderboard.map((entry, idx) => {
+                {leaderboard.map((entry) => {
                   const isCurrentUser = entry.player_id === user.id;
                   return (
                     <tr

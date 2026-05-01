@@ -14,13 +14,13 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Generates a small set of unique castaway IDs */
-const arbitraryCastawayIds = (count: number) =>
+const _arbitraryCastawayIds = (count: number) =>
   fc
     .uniqueArray(fc.uuid(), { minLength: count, maxLength: count })
     .map((ids) => ids);
 
 /** Generates team assignments for a given list of castaway IDs */
-const arbitraryAssignments = (castawayIds: string[]): fc.Arbitrary<TeamAssignment[]> =>
+const _arbitraryAssignments = (castawayIds: string[]): fc.Arbitrary<TeamAssignment[]> =>
   fc.constant(
     castawayIds.map((id) => ({
       castaway_id: id,
