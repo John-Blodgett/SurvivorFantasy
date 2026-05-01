@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { validateCreateLeague, generateInviteCode } from "@/lib/leagues";
 
 export async function createLeagueAction(formData: FormData) {
@@ -27,6 +28,25 @@ export async function createLeagueAction(formData: FormData) {
 
   const inviteCode = generateInviteCode();
 
+  // Ensure the user has a profile row (FK target for leagues.admin_id)
+  const { error: profileError } = await supabase.from("profiles").upsert(
+    {
+      id: user.id,
+      display_name:
+        user.user_metadata?.display_name ??
+        user.email ??
+        "Player",
+    },
+    { onConflict: "id", ignoreDuplicates: true }
+  );
+
+  if (profileError) {
+    console.error("Profile upsert failed:", profileError);
+    redirect(
+      `/leagues/new?error=${encodeURIComponent(`Profile error: ${profileError.message}`)}`
+    );
+  }
+
   // Insert league — Requirements 2.1, 2.4, 2.5, 2.6
   const { data: league, error: leagueError } = await supabase
     .from("leagues")
@@ -41,7 +61,12 @@ export async function createLeagueAction(formData: FormData) {
     .single();
 
   if (leagueError || !league) {
-    redirect(`/leagues/new?error=${encodeURIComponent("Failed to create league. Please try again.")}`);
+    console.error("League insert failed:", leagueError);
+    redirect(
+      `/leagues/new?error=${encodeURIComponent(
+        leagueError?.message ?? "Failed to create league. Please try again."
+      )}`
+    );
   }
 
   // Add creator as a league member
@@ -53,5 +78,6 @@ export async function createLeagueAction(formData: FormData) {
   // Seed default scoring rules — Requirement 5.3
   await supabase.rpc("seed_default_scoring_rules", { p_league_id: league.id });
 
+  revalidatePath("/dashboard");
   redirect(`/dashboard?created=${league.id}`);
 }

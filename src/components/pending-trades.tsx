@@ -1,6 +1,7 @@
 "use client";
 
 import { acceptTradeAction, rejectTradeAction } from "@/app/dashboard/trade-actions";
+import SubmitButton from "./submit-button";
 
 interface PendingTrade {
   id: string;
@@ -39,21 +40,21 @@ export default function PendingTrades({ trades }: PendingTradesProps) {
             <div className="flex gap-2">
               <form action={acceptTradeAction}>
                 <input type="hidden" name="trade_id" value={trade.id} />
-                <button
-                  type="submit"
-                  className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors"
+                <SubmitButton
+                  pendingText="Accepting…"
+                  className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
                   Accept
-                </button>
+                </SubmitButton>
               </form>
               <form action={rejectTradeAction}>
                 <input type="hidden" name="trade_id" value={trade.id} />
-                <button
-                  type="submit"
-                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
+                <SubmitButton
+                  pendingText="Rejecting…"
+                  className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
                 >
                   Reject
-                </button>
+                </SubmitButton>
               </form>
             </div>
           </div>

@@ -10,6 +10,23 @@ export async function GET(request: Request) {
     const supabase = createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Ensure a profile row exists for this user (needed for FK references)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from("profiles").upsert(
+          {
+            id: user.id,
+            display_name:
+              user.user_metadata?.display_name ??
+              user.user_metadata?.full_name ??
+              user.email ??
+              "Player",
+          },
+          { onConflict: "id", ignoreDuplicates: true }
+        );
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
   }

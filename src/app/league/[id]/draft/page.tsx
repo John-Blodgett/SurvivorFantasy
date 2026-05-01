@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
-import { getLeagueNavLinks } from "@/components/league-nav";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
 import DraftRoom from "@/components/draft-room";
 import { generateSnakeOrder } from "@/lib/draft";
 
@@ -32,11 +32,13 @@ export default async function DraftRoomPage({
   // Load league
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, roster_size, pick_timer_seconds, draft_mode")
+    .select("id, name, roster_size, pick_timer_seconds, draft_mode, admin_id")
     .eq("id", leagueId)
     .single();
 
   if (!league) redirect("/dashboard");
+
+  const isAdmin = league.admin_id === user.id;
 
   // Load draft
   const { data: draft } = await supabase
@@ -46,7 +48,25 @@ export default async function DraftRoomPage({
     .single();
 
   if (!draft) {
-    redirect(`/dashboard`);
+    return (
+      <AppShell
+        title={`Draft Room — ${league.name}`}
+        backHref={`/league/${leagueId}/leaderboard`}
+        backLabel="League"
+        navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      >
+        <div className="p-4 sm:p-6 max-w-3xl mx-auto">
+          <div className="rounded-lg border border-dashed border-border p-10 text-center space-y-2">
+            <p className="text-muted-foreground text-sm">
+              The draft hasn&apos;t started yet.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              The league admin will start the draft when everyone is ready.
+            </p>
+          </div>
+        </div>
+      </AppShell>
+    );
   }
 
   // Load players in join order with display names
@@ -92,7 +112,7 @@ export default async function DraftRoomPage({
       title={`Draft Room — ${league.name}`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getLeagueNavLinks(leagueId)}
+      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
     >
       <DraftRoom
         leagueId={leagueId}

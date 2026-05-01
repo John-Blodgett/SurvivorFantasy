@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { Loader2 } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -134,7 +135,14 @@ export default function RegisterPage() {
             disabled={loading}
             className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Creating account…" : "Create Account"}
+            {loading ? (
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                Creating account…
+              </span>
+            ) : (
+              "Create Account"
+            )}
           </button>
         </form>
 

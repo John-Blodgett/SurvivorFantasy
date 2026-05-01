@@ -1,15 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
+import SubmitButton from "@/components/submit-button";
 import { updateWaiverScheduleAction, processWaiversAction } from "./actions";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export default async function AdminWaiverPage({
-  searchParams,
-}: {
+interface PageProps {
+  params: { id: string };
   searchParams: { success?: string; error?: string };
-}) {
+}
+
+export default async function AdminWaiverPage({ params, searchParams }: PageProps) {
   const supabase = createClient();
   const {
     data: { user },
@@ -17,16 +20,15 @@ export default async function AdminWaiverPage({
 
   if (!user) redirect("/");
 
-  // Verify admin
+  const leagueId = params.id;
+
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, waiver_budget, waiver_process_day, waiver_process_hour, waiver_process_minute")
-    .eq("admin_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .select("id, name, waiver_budget, waiver_process_day, waiver_process_hour, waiver_process_minute, admin_id")
+    .eq("id", leagueId)
     .single();
 
-  if (!league) redirect("/dashboard");
+  if (!league || league.admin_id !== user.id) redirect("/dashboard");
 
   // Fetch all pending claims
   const { data: rawClaims } = await supabase
@@ -65,7 +67,12 @@ export default async function AdminWaiverPage({
       : null;
 
   return (
-    <AppShell title={`Waiver Wire Admin — ${league.name}`} backHref="/dashboard" backLabel="Dashboard">
+    <AppShell
+      title={`Waiver Wire Admin — ${league.name}`}
+      backHref={`/league/${leagueId}/leaderboard`}
+      backLabel="League"
+      navLinks={getAllLeagueNavLinks(leagueId, true)}
+    >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {toastMessage && (
           <p
@@ -88,6 +95,7 @@ export default async function AdminWaiverPage({
         <section className="rounded-lg border border-border bg-card p-4 space-y-3">
           <h2 className="text-sm font-semibold">Processing Schedule</h2>
           <form action={updateWaiverScheduleAction} className="space-y-3">
+            <input type="hidden" name="league_id" value={leagueId} />
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium mb-1">Day</label>
@@ -126,12 +134,12 @@ export default async function AdminWaiverPage({
                 />
               </div>
             </div>
-            <button
-              type="submit"
-              className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
+            <SubmitButton
+              pendingText="Saving…"
+              className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50"
             >
               Save Schedule
-            </button>
+            </SubmitButton>
           </form>
         </section>
 
@@ -142,12 +150,13 @@ export default async function AdminWaiverPage({
             Process all pending waiver claims immediately.
           </p>
           <form action={processWaiversAction}>
-            <button
-              type="submit"
-              className="rounded bg-orange-600 text-white px-4 py-2 text-sm font-medium hover:bg-orange-700 transition-colors min-h-[44px]"
+            <input type="hidden" name="league_id" value={leagueId} />
+            <SubmitButton
+              pendingText="Processing…"
+              className="rounded bg-orange-600 text-white px-4 py-2 text-sm font-medium hover:bg-orange-700 transition-colors min-h-[44px] disabled:opacity-50"
             >
               Process Now ({claims.length} pending)
-            </button>
+            </SubmitButton>
           </form>
         </section>
 

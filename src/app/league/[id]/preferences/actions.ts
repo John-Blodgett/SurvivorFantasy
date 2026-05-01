@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 /**
  * Saves a player's castaway preference rankings for the draft.
@@ -70,5 +71,6 @@ export async function savePreferencesAction(formData: FormData) {
     );
   }
 
+  revalidatePath(`/league/${leagueId}/preferences`);
   redirect(`/league/${leagueId}/preferences?success=saved`);
 }

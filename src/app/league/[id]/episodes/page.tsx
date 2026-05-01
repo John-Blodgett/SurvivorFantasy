@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
-import { getLeagueNavLinks } from "@/components/league-nav";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
 import { sortEpisodesDescending, type RecapEpisode } from "@/lib/episode-recap";
 
 interface PageProps {
@@ -32,11 +32,13 @@ export default async function SeasonSummaryPage({ params }: PageProps) {
   // Fetch league info
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, season_number")
+    .select("id, name, season_number, admin_id")
     .eq("id", leagueId)
     .single();
 
   if (!league) redirect("/dashboard");
+
+  const isAdmin = league.admin_id === user.id;
 
   // Fetch all finalized episodes
   const { data: rawEpisodes } = await supabase
@@ -59,7 +61,7 @@ export default async function SeasonSummaryPage({ params }: PageProps) {
       title={`${league.name} — Season ${league.season_number} Episodes`}
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="Leaderboard"
-      navLinks={getLeagueNavLinks(leagueId)}
+      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
         {sortedEpisodes.length === 0 ? (

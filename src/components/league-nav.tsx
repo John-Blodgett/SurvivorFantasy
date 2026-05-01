@@ -10,3 +10,14 @@ export function getLeagueNavLinks(leagueId: string) {
     { href: `/league/${leagueId}/waiver`, label: "Waiver Wire" },
   ];
 }
+
+/**
+ * Combined nav links: player links + single admin hub link (if the user is admin).
+ */
+export function getAllLeagueNavLinks(leagueId: string, isAdmin: boolean) {
+  const links = getLeagueNavLinks(leagueId);
+  if (isAdmin) {
+    links.push({ href: `/league/${leagueId}/admin`, label: "⚙ Admin" });
+  }
+  return links;
+}

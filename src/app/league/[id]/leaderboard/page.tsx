@@ -4,7 +4,7 @@ import Link from "next/link";
 import { computePlayerScore } from "@/lib/scoring";
 import { computeLeaderboard } from "@/lib/leaderboard";
 import AppShell from "@/components/app-shell";
-import { getLeagueNavLinks } from "@/components/league-nav";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
 import type {
   TeamAssignment,
   EpisodeEvent,
@@ -40,11 +40,13 @@ export default async function LeaderboardPage({ params }: PageProps) {
   // Fetch league info
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, season_number, consolation_points")
+    .select("id, name, season_number, consolation_points, admin_id")
     .eq("id", leagueId)
     .single();
 
   if (!league) redirect("/dashboard");
+
+  const isAdmin = league.admin_id === user.id;
 
   // Fetch all league members with their display names
   const { data: members } = await supabase
@@ -149,7 +151,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
       title={`${league.name} — Leaderboard`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getLeagueNavLinks(leagueId)}
+      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <p className="text-sm text-muted-foreground">

@@ -2,18 +2,16 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
+import SubmitButton from "@/components/submit-button";
 import { configureDraftAction, startDraftAction } from "./actions";
 
-interface SearchParams {
-  error?: string;
-  success?: string;
+interface PageProps {
+  params: { id: string };
+  searchParams: { error?: string; success?: string };
 }
 
-export default async function AdminDraftPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
+export default async function AdminDraftPage({ params, searchParams }: PageProps) {
   const supabase = createClient();
   const {
     data: { user },
@@ -21,16 +19,15 @@ export default async function AdminDraftPage({
 
   if (!user) redirect("/");
 
-  // Get the league this user admins
+  const leagueId = params.id;
+
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, draft_mode, pick_timer_seconds, roster_size")
-    .eq("admin_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .select("id, name, draft_mode, pick_timer_seconds, roster_size, admin_id")
+    .eq("id", leagueId)
     .single();
 
-  if (!league) redirect("/dashboard");
+  if (!league || league.admin_id !== user.id) redirect("/dashboard");
 
   // Get draft status
   const { data: draft } = await supabase
@@ -64,7 +61,12 @@ export default async function AdminDraftPage({
       : null;
 
   return (
-    <AppShell title={`Draft — ${league.name}`} backHref="/dashboard" backLabel="Dashboard">
+    <AppShell
+      title={`Draft — ${league.name}`}
+      backHref={`/league/${leagueId}/leaderboard`}
+      backLabel="League"
+      navLinks={getAllLeagueNavLinks(leagueId, true)}
+    >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {searchParams.error && (
           <p
@@ -123,7 +125,7 @@ export default async function AdminDraftPage({
             </h2>
             <div className="rounded-lg border border-border bg-card p-5">
               <form action={configureDraftAction} className="space-y-5">
-                <input type="hidden" name="league_id" value={league.id} />
+                <input type="hidden" name="league_id" value={leagueId} />
 
                 {/* Draft mode */}
                 <fieldset>
@@ -191,12 +193,12 @@ export default async function AdminDraftPage({
                   </p>
                 </div>
 
-                <button
-                  type="submit"
-                  className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors"
+                <SubmitButton
+                  pendingText="Saving…"
+                  className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   Save Settings
-                </button>
+                </SubmitButton>
               </form>
             </div>
           </section>
@@ -222,9 +224,9 @@ export default async function AdminDraftPage({
               )}
 
               <form action={startDraftAction}>
-                <input type="hidden" name="league_id" value={league.id} />
-                <button
-                  type="submit"
+                <input type="hidden" name="league_id" value={leagueId} />
+                <SubmitButton
+                  pendingText="Starting…"
                   disabled={
                     (playerCount ?? 0) < 2 ||
                     (castawayCount ?? 0) < (league.roster_size ?? 1)
@@ -232,7 +234,7 @@ export default async function AdminDraftPage({
                   className="rounded bg-primary text-primary-foreground px-5 py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Start Draft
-                </button>
+                </SubmitButton>
               </form>
 
               <p className="text-xs text-muted-foreground">

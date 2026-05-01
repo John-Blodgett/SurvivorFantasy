@@ -1,18 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
+import SubmitButton from "@/components/submit-button";
 import { assignCastawayAction } from "./actions";
 
-interface SearchParams {
-  error?: string;
-  success?: string;
+interface PageProps {
+  params: { id: string };
+  searchParams: { error?: string; success?: string };
 }
 
-export default async function AdminLateJoinPage({
-  searchParams,
-}: {
-  searchParams: SearchParams;
-}) {
+export default async function AdminLateJoinPage({ params, searchParams }: PageProps) {
   const supabase = createClient();
   const {
     data: { user },
@@ -20,16 +18,15 @@ export default async function AdminLateJoinPage({
 
   if (!user) redirect("/");
 
-  // Get the league this user admins
+  const leagueId = params.id;
+
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, roster_size")
-    .eq("admin_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .select("id, name, roster_size, admin_id")
+    .eq("id", leagueId)
     .single();
 
-  if (!league) redirect("/dashboard");
+  if (!league || league.admin_id !== user.id) redirect("/dashboard");
 
   // Check if draft is complete
   const { data: draft } = await supabase
@@ -109,7 +106,12 @@ export default async function AdminLateJoinPage({
   const pointsFromEpisode = (latestFinalizedEpisode?.number ?? 0) + 1;
 
   return (
-    <AppShell title={`Late-Join Assignment — ${league.name}`} backHref="/dashboard" backLabel="Dashboard">
+    <AppShell
+      title={`Late-Join Assignment — ${league.name}`}
+      backHref={`/league/${leagueId}/leaderboard`}
+      backLabel="League"
+      navLinks={getAllLeagueNavLinks(leagueId, true)}
+    >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {searchParams.error && (
           <p
@@ -178,6 +180,7 @@ export default async function AdminLateJoinPage({
                       </p>
                     ) : (
                       <form action={assignCastawayAction} className="flex flex-col sm:flex-row gap-2">
+                        <input type="hidden" name="league_id" value={leagueId} />
                         <input type="hidden" name="player_id" value={player.id} />
                         <select
                           name="castaway_id"
@@ -193,12 +196,12 @@ export default async function AdminLateJoinPage({
                             </option>
                           ))}
                         </select>
-                        <button
-                          type="submit"
-                          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                        <SubmitButton
+                          pendingText="Assigning…"
+                          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
                         >
                           Assign
-                        </button>
+                        </SubmitButton>
                       </form>
                     )}
                   </div>

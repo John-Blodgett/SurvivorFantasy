@@ -9,7 +9,7 @@ import type {
   ChallengeSubmission,
 } from "@/lib/scoring";
 import AppShell from "@/components/app-shell";
-import { getLeagueNavLinks } from "@/components/league-nav";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
 import TradeProposalForm from "@/components/trade-proposal-form";
 
 interface PageProps {
@@ -41,11 +41,13 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
   // Fetch league info
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, season_number, consolation_points")
+    .select("id, name, season_number, consolation_points, admin_id")
     .eq("id", leagueId)
     .single();
 
   if (!league) redirect("/dashboard");
+
+  const isAdmin = league.admin_id === user.id;
 
   // Fetch the target player's profile
   const { data: targetProfile } = await supabase
@@ -197,7 +199,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
       title={isOwnTeam ? `My Team — ${league.name}` : `${displayName}'s Team — ${league.name}`}
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="Leaderboard"
-      navLinks={getLeagueNavLinks(leagueId)}
+      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
         {/* Summary header */}

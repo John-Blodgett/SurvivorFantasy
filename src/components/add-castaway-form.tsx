@@ -1,14 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { addCastawayAction } from "@/app/admin/castaways/actions";
+import { addCastawayAction } from "@/app/league/[id]/admin/castaways/actions";
 import PhotoUpload from "./photo-upload";
+import SubmitButton from "./submit-button";
 
-export default function AddCastawayForm() {
+interface AddCastawayFormProps {
+  leagueId: string;
+}
+
+export default function AddCastawayForm({ leagueId }: AddCastawayFormProps) {
   const [photoUrl, setPhotoUrl] = useState<string>("");
 
   return (
     <form action={addCastawayAction} className="space-y-4">
+      <input type="hidden" name="league_id" value={leagueId} />
       {/* Hidden field carries the uploaded photo URL */}
       <input type="hidden" name="photo_url" value={photoUrl} />
 
@@ -45,12 +51,12 @@ export default function AddCastawayForm() {
         </div>
       </div>
 
-      <button
-        type="submit"
-        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+      <SubmitButton
+        pendingText="Adding…"
+        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
         Add Castaway
-      </button>
+      </SubmitButton>
     </form>
   );
 }

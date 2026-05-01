@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { savePreferencesAction } from "@/app/league/[id]/preferences/actions";
+import { Loader2 } from "lucide-react";
 
 interface Castaway {
   id: string;
@@ -158,7 +159,14 @@ export default function DraftPreferencesForm({ leagueId, castaways }: Props) {
         disabled={saving}
         className="rounded bg-primary text-primary-foreground px-5 py-2.5 text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
       >
-        {saving ? "Saving…" : "Save Rankings"}
+        {saving ? (
+          <span className="inline-flex items-center gap-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            Saving…
+          </span>
+        ) : (
+          "Save Rankings"
+        )}
       </button>
     </form>
   );

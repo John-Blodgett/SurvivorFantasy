@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { addEpisodeEventAction } from "@/app/admin/episode/[num]/actions";
+import { addEpisodeEventAction } from "@/app/league/[id]/admin/episode/[num]/actions";
+import SubmitButton from "./submit-button";
 import type { Castaway } from "@/lib/castaways";
 import type { ScoringRule } from "@/lib/scoring-rules";
 import Link from "next/link";
 
 interface EpisodeScorerFormProps {
+  leagueId: string;
   episodeNumber: number;
   castaways: Castaway[];
   rules: ScoringRule[];
 }
 
 export default function EpisodeScorerForm({
+  leagueId,
   episodeNumber,
   castaways,
   rules,
@@ -24,7 +27,7 @@ export default function EpisodeScorerForm({
     return (
       <p className="text-sm text-muted-foreground">
         No active castaways. Add castaways in{" "}
-        <Link href="/admin/castaways" className="underline">
+        <Link href={`/league/${leagueId}/admin/castaways`} className="underline">
           Castaway Management
         </Link>
         .
@@ -36,7 +39,7 @@ export default function EpisodeScorerForm({
     return (
       <p className="text-sm text-muted-foreground">
         No scoring rules. Add rules in{" "}
-        <Link href="/admin/rules" className="underline">
+        <Link href={`/league/${leagueId}/admin/rules`} className="underline">
           Scoring Rules
         </Link>
         .
@@ -49,6 +52,7 @@ export default function EpisodeScorerForm({
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-4">
       <form action={addEpisodeEventAction} className="space-y-4">
+        <input type="hidden" name="league_id" value={leagueId} />
         <input type="hidden" name="episode_number" value={episodeNumber} />
         <input
           type="hidden"
@@ -147,13 +151,13 @@ export default function EpisodeScorerForm({
           </div>
         )}
 
-        <button
-          type="submit"
+        <SubmitButton
+          pendingText="Recording…"
           disabled={!selectedCastawayId || !selectedRuleId}
           className="w-full rounded bg-primary text-primary-foreground px-4 py-3 text-sm font-semibold hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Record Event
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

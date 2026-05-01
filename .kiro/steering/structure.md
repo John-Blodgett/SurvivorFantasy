@@ -30,9 +30,9 @@ supabase/
 
 ### Routing conventions
 
-- `/admin/*` — league admin pages (castaways, draft, episodes, rules, trades, waiver, late-join)
+- `/league/[id]/admin/*` — league admin pages (castaways, draft, episodes, rules, trades, waiver, late-join), scoped to a specific league
 - `/league/[id]/*` — player-facing league pages (leaderboard, draft, team, episodes, challenges, waiver, preferences)
-- `/dashboard` — authenticated home (league list, pending trades)
+- `/dashboard` — authenticated home (league list with admin links, pending trades)
 - `/join/[invite_code]` — invite link handler
 - `/api/*` — API routes (e.g., auto-pick endpoint)
 

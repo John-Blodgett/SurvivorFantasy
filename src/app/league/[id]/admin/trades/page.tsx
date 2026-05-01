@@ -1,13 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
+import SubmitButton from "@/components/submit-button";
 import { approveTradeAction, adminRejectTradeAction } from "./actions";
 
-export default async function AdminTradesPage({
-  searchParams,
-}: {
+interface PageProps {
+  params: { id: string };
   searchParams: { success?: string; error?: string };
-}) {
+}
+
+export default async function AdminTradesPage({ params, searchParams }: PageProps) {
   const supabase = createClient();
   const {
     data: { user },
@@ -15,16 +18,15 @@ export default async function AdminTradesPage({
 
   if (!user) redirect("/");
 
-  // Verify admin
+  const leagueId = params.id;
+
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name")
-    .eq("admin_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .select("id, name, admin_id")
+    .eq("id", leagueId)
     .single();
 
-  if (!league) redirect("/dashboard");
+  if (!league || league.admin_id !== user.id) redirect("/dashboard");
 
   // Fetch accepted trades (awaiting admin approval)
   const { data: tradesRaw } = await supabase
@@ -62,7 +64,12 @@ export default async function AdminTradesPage({
     : null;
 
   return (
-    <AppShell title={`Trade Approval — ${league.name}`} backHref="/dashboard" backLabel="Dashboard">
+    <AppShell
+      title={`Trade Approval — ${league.name}`}
+      backHref={`/league/${leagueId}/leaderboard`}
+      backLabel="League"
+      navLinks={getAllLeagueNavLinks(leagueId, true)}
+    >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {toastMessage && (
           <p
@@ -119,22 +126,24 @@ export default async function AdminTradesPage({
                 </p>
                 <div className="flex gap-2">
                   <form action={approveTradeAction}>
+                    <input type="hidden" name="league_id" value={leagueId} />
                     <input type="hidden" name="trade_id" value={trade.id} />
-                    <button
-                      type="submit"
-                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors"
+                    <SubmitButton
+                      pendingText="Approving…"
+                      className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
                     >
                       Approve
-                    </button>
+                    </SubmitButton>
                   </form>
                   <form action={adminRejectTradeAction}>
+                    <input type="hidden" name="league_id" value={leagueId} />
                     <input type="hidden" name="trade_id" value={trade.id} />
-                    <button
-                      type="submit"
-                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors"
+                    <SubmitButton
+                      pendingText="Rejecting…"
+                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                     >
                       Reject
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               </div>

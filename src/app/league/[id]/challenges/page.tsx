@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
-import { getLeagueNavLinks } from "@/components/league-nav";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
+import SubmitButton from "@/components/submit-button";
 import { submitChallengeResponseAction } from "./actions";
 
 interface PageProps {
@@ -32,11 +33,13 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
   // Fetch league info
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name")
+    .select("id, name, admin_id")
     .eq("id", leagueId)
     .single();
 
   if (!league) redirect("/dashboard");
+
+  const isAdmin = league.admin_id === user.id;
 
   // Fetch all challenges for this league with episode info
   const { data: rawChallenges } = await supabase
@@ -75,7 +78,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
       title={`${league.name} — Weekly Challenges`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getLeagueNavLinks(leagueId)}
+      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
         {searchParams.error && (
@@ -175,12 +178,12 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                         className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
                         placeholder="Enter your answer..."
                       />
-                      <button
-                        type="submit"
-                        className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px]"
+                      <SubmitButton
+                        pendingText="Submitting…"
+                        className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50"
                       >
                         Submit
-                      </button>
+                      </SubmitButton>
                     </form>
                   ) : (
                     <p className="text-xs text-muted-foreground border-t border-border pt-2">

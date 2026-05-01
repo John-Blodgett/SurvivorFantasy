@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { proposeTradeAction } from "@/app/league/[id]/team/[userId]/actions";
+import { Loader2 } from "lucide-react";
 
 interface Castaway {
   id: string;
@@ -103,7 +104,14 @@ export default function TradeProposalForm({
             disabled={!myCastawayId || !theirCastawayId || submitting}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            {submitting ? "Sending..." : "Send Proposal"}
+            {submitting ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                Sending…
+              </span>
+            ) : (
+              "Send Proposal"
+            )}
           </button>
           <button
             type="button"

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import Link from "next/link";
 
 interface Props {
@@ -81,5 +82,6 @@ export default async function JoinLeaguePage({ params }: Props) {
     );
   }
 
+  revalidatePath("/dashboard");
   redirect(`/dashboard?joined=${league.id}`);
 }

@@ -61,7 +61,7 @@ export default function AppShell({
                     key={link.href}
                     href={link.href}
                     className={`rounded-md px-3 py-2 text-sm font-medium transition-colors min-h-[44px] flex items-center ${
-                      pathname === link.href
+                      pathname === link.href || (link.href.includes("/admin") && pathname.startsWith(link.href))
                         ? "bg-primary/10 text-primary"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
                     }`}
@@ -113,7 +113,7 @@ export default function AppShell({
                 href={link.href}
                 onClick={() => setMenuOpen(false)}
                 className={`block rounded-md px-3 py-3 text-sm font-medium transition-colors min-h-[44px] ${
-                  pathname === link.href
+                  pathname === link.href || (link.href.includes("/admin") && pathname.startsWith(link.href))
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}

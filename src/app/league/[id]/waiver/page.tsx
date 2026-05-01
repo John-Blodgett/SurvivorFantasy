@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
-import { getLeagueNavLinks } from "@/components/league-nav";
+import { getAllLeagueNavLinks } from "@/components/league-nav";
+import SubmitButton from "@/components/submit-button";
 import { submitWaiverClaimAction } from "./actions";
 
 interface PageProps {
@@ -32,11 +33,13 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
   // Fetch league info
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, waiver_budget")
+    .select("id, name, waiver_budget, admin_id")
     .eq("id", leagueId)
     .single();
 
   if (!league) redirect("/dashboard");
+
+  const isAdmin = league.admin_id === user.id;
 
   // Get all team assignments in the league
   const { data: allAssignments } = await supabase
@@ -90,7 +93,7 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
       title={`${league.name} — Waiver Wire`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getLeagueNavLinks(leagueId)}
+      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
         {searchParams.error && (
@@ -163,6 +166,7 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
                 >
                   <div className="flex items-center gap-3">
                     {castaway.photo_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={castaway.photo_url}
                         alt={castaway.name}
@@ -220,12 +224,12 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
                         className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
                       />
 
-                      <button
-                        type="submit"
-                        className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px] w-full"
+                      <SubmitButton
+                        pendingText="Submitting…"
+                        className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px] w-full disabled:opacity-50"
                       >
                         Submit Claim
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </div>
