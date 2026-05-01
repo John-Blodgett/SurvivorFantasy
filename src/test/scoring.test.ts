@@ -14,13 +14,15 @@ import {
 // ---------------------------------------------------------------------------
 
 /** Generates a small set of unique castaway IDs */
-const _arbitraryCastawayIds = (count: number) =>
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const arbitraryCastawayIds = (count: number) =>
   fc
     .uniqueArray(fc.uuid(), { minLength: count, maxLength: count })
     .map((ids) => ids);
 
 /** Generates team assignments for a given list of castaway IDs */
-const _arbitraryAssignments = (castawayIds: string[]): fc.Arbitrary<TeamAssignment[]> =>
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const arbitraryAssignments = (castawayIds: string[]): fc.Arbitrary<TeamAssignment[]> =>
   fc.constant(
     castawayIds.map((id) => ({
       castaway_id: id,
