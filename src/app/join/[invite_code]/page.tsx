@@ -19,12 +19,11 @@ export default async function JoinLeaguePage({ params }: Props) {
     redirect(`/?next=/join/${params.invite_code}`);
   }
 
-  // Look up the league by invite code — Requirement 2.2, 2.3
-  const { data: league, error: leagueError } = await supabase
-    .from("leagues")
-    .select("id, name, season_number, roster_size")
-    .eq("invite_code", params.invite_code)
-    .single();
+  // Look up the league by invite code via RLS-bypassing function — Requirement 2.2, 2.3
+  const { data: leagues, error: leagueError } = await supabase
+    .rpc("lookup_league_by_invite_code", { p_invite_code: params.invite_code });
+
+  const league = leagues?.[0] ?? null;
 
   if (leagueError || !league) {
     return (
