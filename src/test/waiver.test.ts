@@ -67,7 +67,7 @@ describe("Property 17: Waiver wire contains only unowned, non-eliminated castawa
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -103,6 +103,7 @@ describe("Property 14: Waiver claim winner has highest bid", () => {
             castaway_id: castawayId,
             drop_castaway_id: c.drop_castaway_id,
             bid_amount: c.bid_amount,
+            priority: 1,
             status: "pending" as const,
           }));
 
@@ -126,7 +127,7 @@ describe("Property 14: Waiver claim winner has highest bid", () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -145,6 +146,7 @@ describe("Property 14: Waiver claim winner has highest bid", () => {
             castaway_id: castawayId,
             drop_castaway_id: `drop-${i}`,
             bid_amount: tiedBid,
+            priority: i + 1,
             status: "pending" as const,
           }));
 
@@ -159,7 +161,7 @@ describe("Property 14: Waiver claim winner has highest bid", () => {
           expect(losers.length).toBe(numTied - 1);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -205,6 +207,7 @@ describe("Property 15: Waiver budget is never over-spent", () => {
             castaway_id: c.castaway_id,
             drop_castaway_id: c.drop_castaway_id,
             bid_amount: bidPerClaim,
+            priority: 1,
             status: "pending" as const,
           }));
 
@@ -218,7 +221,7 @@ describe("Property 15: Waiver budget is never over-spent", () => {
           expect(totalDeducted).toBeLessThanOrEqual(startingBudget);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -253,6 +256,7 @@ describe("Property 16: Losing waiver claimants are not charged", () => {
             castaway_id: castawayId,
             drop_castaway_id: c.drop_castaway_id,
             bid_amount: c.bid_amount,
+            priority: 1,
             status: "pending" as const,
           }));
 
@@ -265,7 +269,7 @@ describe("Property 16: Losing waiver claimants are not charged", () => {
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

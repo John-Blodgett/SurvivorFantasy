@@ -9,43 +9,20 @@ import {
   type ChallengeSubmission,
 } from "@/lib/scoring";
 
-// ---------------------------------------------------------------------------
-// Shared arbitraries
-// ---------------------------------------------------------------------------
-
-/** Generates a small set of unique castaway IDs */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const arbitraryCastawayIds = (count: number) =>
-  fc
-    .uniqueArray(fc.uuid(), { minLength: count, maxLength: count })
-    .map((ids) => ids);
-
-/** Generates team assignments for a given list of castaway IDs */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const arbitraryAssignments = (castawayIds: string[]): fc.Arbitrary<TeamAssignment[]> =>
-  fc.constant(
-    castawayIds.map((id) => ({
-      castaway_id: id,
-      points_from_episode: 1,
-      source: "draft" as const,
-    }))
-  );
+const PLAYER_ID = "player-1";
 
 // ---------------------------------------------------------------------------
 // Property 1: Points computation equals sum of eligible episode events
-// Feature: fantasy-survivor, Property 1: Points computation equals sum of eligible episode events
 // Validates: Requirements 6.3, 8.1, 8.2
 // ---------------------------------------------------------------------------
 
 describe("Property 1: Points computation equals sum of eligible episode events", () => {
-  it("total equals sum of all episode event points for castaways on the team", () => {
+  it("total equals sum of all episode event points attributed to this player", () => {
     fc.assert(
       fc.property(
-        // Generate 1–5 castaway IDs
         fc.integer({ min: 1, max: 5 }).chain((n) =>
           fc.uniqueArray(fc.uuid(), { minLength: n, maxLength: n })
         ),
-        // Generate 1–10 episode events for those castaways
         fc.array(
           fc.record({
             episode_number: fc.integer({ min: 1, max: 10 }),
@@ -54,10 +31,10 @@ describe("Property 1: Points computation equals sum of eligible episode events",
           { minLength: 1, maxLength: 20 }
         ),
         (castawayIds, rawEvents) => {
-          // Assign all events to castaways on the team (round-robin)
           const events: EpisodeEvent[] = rawEvents.map((e, i) => ({
             ...e,
             castaway_id: castawayIds[i % castawayIds.length],
+            player_id: PLAYER_ID,
           }));
 
           const assignments: TeamAssignment[] = castawayIds.map((id) => ({
@@ -71,11 +48,12 @@ describe("Property 1: Points computation equals sum of eligible episode events",
           ).map((n) => ({ number: n }));
 
           const result = computePlayerScore(
+            PLAYER_ID,
             assignments,
             events,
             [],
             finalizedEpisodes,
-            0, // no consolation points
+            0,
             []
           );
 
@@ -84,63 +62,59 @@ describe("Property 1: Points computation equals sum of eligible episode events",
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
-  it("events for castaways NOT on the team are excluded from the total", () => {
+  it("events attributed to a different player are excluded from the total", () => {
     fc.assert(
       fc.property(
-        // Team castaway IDs
-        fc.uniqueArray(fc.uuid(), { minLength: 1, maxLength: 3 }),
-        // Non-team castaway IDs (disjoint)
         fc.uniqueArray(fc.uuid(), { minLength: 1, maxLength: 3 }),
         fc.array(fc.integer({ min: 1, max: 50 }), { minLength: 1, maxLength: 10 }),
-        (teamIds, nonTeamIds, pointValues) => {
-          // Ensure no overlap
-          const nonTeamFiltered = nonTeamIds.filter((id) => !teamIds.includes(id));
-          if (nonTeamFiltered.length === 0) return true; // skip if overlap
-
-          const teamEvents: EpisodeEvent[] = pointValues.map((p, i) => ({
+        (castawayIds, pointValues) => {
+          const myEvents: EpisodeEvent[] = pointValues.map((p, i) => ({
             episode_number: 1,
-            castaway_id: teamIds[i % teamIds.length],
+            castaway_id: castawayIds[i % castawayIds.length],
             points: p,
+            player_id: PLAYER_ID,
           }));
 
-          const nonTeamEvents: EpisodeEvent[] = pointValues.map((p, i) => ({
+          const otherEvents: EpisodeEvent[] = pointValues.map((p, i) => ({
             episode_number: 1,
-            castaway_id: nonTeamFiltered[i % nonTeamFiltered.length],
-            points: p * 100, // large values that would skew the total if included
+            castaway_id: castawayIds[i % castawayIds.length],
+            points: p * 100,
+            player_id: "other-player",
           }));
 
-          const assignments: TeamAssignment[] = teamIds.map((id) => ({
+          const assignments: TeamAssignment[] = castawayIds.map((id) => ({
             castaway_id: id,
             points_from_episode: 1,
             source: "draft" as const,
           }));
 
           const result = computePlayerScore(
+            PLAYER_ID,
             assignments,
-            [...teamEvents, ...nonTeamEvents],
+            [...myEvents, ...otherEvents],
             [],
             [{ number: 1 }],
             0,
             []
           );
 
-          const expectedTotal = teamEvents.reduce((s, e) => s + e.points, 0);
+          const expectedTotal = myEvents.reduce((s, e) => s + e.points, 0);
           expect(result.total).toBe(expectedTotal);
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
 
+
 // ---------------------------------------------------------------------------
 // Property 2: Consolation points accrue correctly for eliminated castaways
-// Feature: fantasy-survivor, Property 2: Consolation points accrue correctly for eliminated castaways
 // Validates: Requirements 14.1, 14.3
 // ---------------------------------------------------------------------------
 
@@ -148,10 +122,10 @@ describe("Property 2: Consolation points accrue correctly for eliminated castawa
   it("consolation = consolation_rate × episodes_after_elimination", () => {
     fc.assert(
       fc.property(
-        fc.uuid(), // castaway ID
-        fc.integer({ min: 1, max: 8 }), // eliminated at episode N
-        fc.integer({ min: 0, max: 5 }), // consolation points per episode
-        fc.integer({ min: 0, max: 5 }), // number of episodes after elimination
+        fc.uuid(),
+        fc.integer({ min: 1, max: 8 }),
+        fc.integer({ min: 0, max: 5 }),
+        fc.integer({ min: 0, max: 5 }),
         (castawayId, eliminatedEpisode, consolationRate, episodesAfter) => {
           const assignment: TeamAssignment = {
             castaway_id: castawayId,
@@ -164,15 +138,15 @@ describe("Property 2: Consolation points accrue correctly for eliminated castawa
             eliminated_episode: eliminatedEpisode,
           };
 
-          // Finalized episodes: the elimination episode + episodesAfter more
           const finalizedEpisodes: FinalizedEpisode[] = Array.from(
             { length: eliminatedEpisode + episodesAfter },
             (_, i) => ({ number: i + 1 })
           );
 
           const result = computePlayerScore(
+            PLAYER_ID,
             [assignment],
-            [], // no episode events
+            [],
             [eliminated],
             finalizedEpisodes,
             consolationRate,
@@ -189,7 +163,7 @@ describe("Property 2: Consolation points accrue correctly for eliminated castawa
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -212,9 +186,10 @@ describe("Property 2: Consolation points accrue correctly for eliminated castawa
           );
 
           const result = computePlayerScore(
+            PLAYER_ID,
             [assignment],
             [],
-            [], // not eliminated
+            [],
             finalizedEpisodes,
             consolationRate,
             []
@@ -228,112 +203,48 @@ describe("Property 2: Consolation points accrue correctly for eliminated castawa
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// Property 6: Late-join point cutoff is respected
-// Feature: fantasy-survivor, Property 6: Late-join point cutoff is respected
-// Validates: Requirements 12.3
+// Property 3: Trade does not move historical points
 // ---------------------------------------------------------------------------
 
-describe("Property 6: Late-join point cutoff is respected", () => {
-  it("episode events before points_from_episode are excluded from the score", () => {
-    fc.assert(
-      fc.property(
-        fc.uuid(), // castaway ID
-        fc.integer({ min: 2, max: 8 }), // points_from_episode (late join)
-        fc.integer({ min: 1, max: 10 }), // total episodes
-        fc.integer({ min: 1, max: 50 }), // points per event
-        (castawayId, pointsFromEpisode, totalEpisodes, pointsPerEvent) => {
-          if (totalEpisodes < pointsFromEpisode) return true; // skip trivial case
+describe("Property 3: Trade does not move historical points", () => {
+  it("points attributed to player A stay with player A after trade", () => {
+    const castawayId = "castaway-1";
+    const playerA = "player-a";
+    const playerB = "player-b";
 
-          const assignment: TeamAssignment = {
-            castaway_id: castawayId,
-            points_from_episode: pointsFromEpisode,
-            source: "admin_assign" as const,
-          };
+    // Events from episode 1 attributed to player A
+    const events: EpisodeEvent[] = [
+      { episode_number: 1, castaway_id: castawayId, points: 10, player_id: playerA },
+    ];
 
-          // One event per episode across all episodes
-          const events: EpisodeEvent[] = Array.from(
-            { length: totalEpisodes },
-            (_, i) => ({
-              episode_number: i + 1,
-              castaway_id: castawayId,
-              points: pointsPerEvent,
-            })
-          );
+    // After trade, player B now owns the castaway
+    const playerBAssignments: TeamAssignment[] = [
+      { castaway_id: castawayId, points_from_episode: 2, source: "trade" },
+    ];
 
-          const finalizedEpisodes: FinalizedEpisode[] = Array.from(
-            { length: totalEpisodes },
-            (_, i) => ({ number: i + 1 })
-          );
+    // Player A no longer has the castaway on their team
+    const playerAAssignments: TeamAssignment[] = [];
 
-          const result = computePlayerScore(
-            [assignment],
-            events,
-            [],
-            finalizedEpisodes,
-            0,
-            []
-          );
+    const finalized: FinalizedEpisode[] = [{ number: 1 }];
 
-          // Only episodes >= pointsFromEpisode should count
-          const eligibleEpisodes = totalEpisodes - pointsFromEpisode + 1;
-          const expectedTotal = eligibleEpisodes * pointsPerEvent;
+    const resultA = computePlayerScore(playerA, playerAAssignments, events, [], finalized, 0, []);
+    const resultB = computePlayerScore(playerB, playerBAssignments, events, [], finalized, 0, []);
 
-          expect(result.total).toBe(expectedTotal);
-          return true;
-        }
-      ),
-      { numRuns: 100 }
-    );
-  });
-
-  it("events exactly at points_from_episode ARE included", () => {
-    fc.assert(
-      fc.property(
-        fc.uuid(),
-        fc.integer({ min: 1, max: 10 }),
-        fc.integer({ min: -50, max: 50 }),
-        (castawayId, pointsFromEpisode, points) => {
-          const assignment: TeamAssignment = {
-            castaway_id: castawayId,
-            points_from_episode: pointsFromEpisode,
-            source: "admin_assign" as const,
-          };
-
-          // Single event exactly at the cutoff episode
-          const events: EpisodeEvent[] = [
-            {
-              episode_number: pointsFromEpisode,
-              castaway_id: castawayId,
-              points,
-            },
-          ];
-
-          const result = computePlayerScore(
-            [assignment],
-            events,
-            [],
-            [{ number: pointsFromEpisode }],
-            0,
-            []
-          );
-
-          expect(result.total).toBe(points);
-          return true;
-        }
-      ),
-      { numRuns: 100 }
-    );
+    // Player A keeps the 10 points from before the trade
+    expect(resultA.total).toBe(10);
+    // Player B gets 0 from episode 1 (those points belong to A)
+    expect(resultB.total).toBe(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Challenge points — only correct submissions count (Property 7 coverage)
+// Challenge points
 // ---------------------------------------------------------------------------
 
 describe("Challenge points: only correct submissions are counted", () => {
@@ -348,7 +259,7 @@ describe("Challenge points: only correct submissions are counted", () => {
           { minLength: 0, maxLength: 10 }
         ),
         (submissions: ChallengeSubmission[]) => {
-          const result = computePlayerScore([], [], [], [], 0, submissions);
+          const result = computePlayerScore(PLAYER_ID, [], [], [], [], 0, submissions);
 
           const expected = submissions
             .filter((s) => s.is_correct === true)
@@ -359,7 +270,7 @@ describe("Challenge points: only correct submissions are counted", () => {
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

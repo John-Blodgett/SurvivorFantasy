@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
@@ -115,6 +116,26 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
         {successMessage && (
           <p role="status" className="text-sm bg-green-50 text-green-800 border border-green-200 rounded-md px-3 py-2">{successMessage}</p>
         )}
+
+        {/* Episode navigation */}
+        <nav className="flex items-center justify-between" aria-label="Episode navigation">
+          {episodeNumber > 1 ? (
+            <Link
+              href={`/league/${leagueId}/admin/episode/${episodeNumber - 1}`}
+              className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
+            >
+              ← Episode {episodeNumber - 1}
+            </Link>
+          ) : (
+            <span />
+          )}
+          <Link
+            href={`/league/${leagueId}/admin/episode/${episodeNumber + 1}`}
+            className="rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            Episode {episodeNumber + 1} →
+          </Link>
+        </nav>
 
         {/* Finalize / Un-finalize controls */}
         <section className="flex flex-wrap items-center gap-3">

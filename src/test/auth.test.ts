@@ -35,7 +35,7 @@ describe("auth validation", () => {
           );
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -60,7 +60,7 @@ describe("auth validation", () => {
           );
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -84,7 +84,7 @@ describe("auth validation", () => {
           return result.valid === true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

@@ -68,7 +68,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
   // Fetch all episode events for this league (join through episodes)
   const { data: episodeEventsRaw } = await supabase
     .from("episode_events")
-    .select("castaway_id, points, episodes!inner(league_id, number, is_finalized)")
+    .select("castaway_id, points, player_id, episodes!inner(league_id, number, is_finalized)")
     .eq("episodes.league_id", leagueId)
     .eq("episodes.is_finalized", true);
 
@@ -77,6 +77,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
       episode_number: (e.episodes as Record<string, unknown>).number as number,
       castaway_id: e.castaway_id as string,
       points: e.points as number,
+      player_id: (e.player_id as string | null) ?? undefined,
     })
   );
 
@@ -107,6 +108,26 @@ export default async function LeaderboardPage({ params }: PageProps) {
     .eq("challenges.league_id", leagueId)
     .eq("is_correct", true);
 
+  // Fetch all castaways for name lookup
+  const { data: allCastawaysRaw } = await supabase
+    .from("castaways")
+    .select("id, name, is_eliminated, photo_url")
+    .eq("league_id", leagueId);
+
+  const castawayMap = new Map(
+    (allCastawaysRaw ?? []).map((c) => [c.id, c])
+  );
+
+  // Build player → castaway details map
+  const playerCastaways = new Map<string, { name: string; is_eliminated: boolean; photo_url: string | null }[]>();
+  for (const a of allAssignmentsRaw ?? []) {
+    const c = castawayMap.get(a.castaway_id);
+    if (!c) continue;
+    const list = playerCastaways.get(a.player_id) ?? [];
+    list.push({ name: c.name, is_eliminated: c.is_eliminated, photo_url: c.photo_url });
+    playerCastaways.set(a.player_id, list);
+  }
+
   // Compute score for each member
   const playerScores = (members ?? []).map((member) => {
     const playerId = member.player_id;
@@ -129,6 +150,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
       }));
 
     const scoreResult = computePlayerScore(
+      playerId,
       assignments,
       allEpisodeEvents,
       eliminatedCastaways,
@@ -177,8 +199,8 @@ export default async function LeaderboardPage({ params }: PageProps) {
                   <th className="px-3 sm:px-4 py-3 text-left font-medium text-muted-foreground">
                     Player
                   </th>
-                  <th className="hidden lg:table-cell px-3 sm:px-4 py-3 text-left font-medium text-muted-foreground w-48">
-                    Progress
+                  <th className="hidden lg:table-cell px-3 sm:px-4 py-3 text-left font-medium text-muted-foreground">
+                    Castaways
                   </th>
                   <th className="px-3 sm:px-4 py-3 text-right font-medium text-muted-foreground w-24">
                     Points
@@ -188,8 +210,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
               <tbody>
                 {leaderboard.map((entry) => {
                   const isCurrentUser = entry.player_id === user.id;
-                  const maxPoints = leaderboard[0]?.total || 1;
-                  const barWidth = maxPoints > 0 ? Math.round((entry.total / maxPoints) * 100) : 0;
+                  const castawayList = playerCastaways.get(entry.player_id) ?? [];
                   return (
                     <tr
                       key={entry.player_id}
@@ -203,23 +224,72 @@ export default async function LeaderboardPage({ params }: PageProps) {
                       <td className="px-3 sm:px-4 py-3">
                         <Link
                           href={`/league/${leagueId}/team/${entry.player_id}`}
-                          className="font-medium hover:underline min-h-[44px] flex items-center"
+                          className="font-medium hover:underline min-h-[44px] flex flex-col justify-center"
                         >
-                          {entry.display_name}
-                          {isCurrentUser && (
-                            <span className="ml-2 text-xs text-muted-foreground font-normal">
-                              (you)
+                          <span>
+                            {entry.display_name}
+                            {isCurrentUser && (
+                              <span className="ml-2 text-xs text-muted-foreground font-normal">
+                                (you)
+                              </span>
+                            )}
+                          </span>
+                          {/* Show castaways inline on small screens only */}
+                          {castawayList.length > 0 && (
+                            <span className="flex flex-wrap gap-2 mt-1 lg:hidden">
+                              {castawayList.map((c) => (
+                                <span
+                                  key={c.name}
+                                  className={`inline-flex items-center gap-1 text-xs text-muted-foreground font-normal ${
+                                    c.is_eliminated ? "opacity-50" : ""
+                                  }`}
+                                >
+                                  {c.photo_url ? (
+                                    /* eslint-disable-next-line @next/next/no-img-element */
+                                    <img
+                                      src={c.photo_url}
+                                      alt={c.name}
+                                      className="rounded-full object-cover w-5 h-5 shrink-0"
+                                    />
+                                  ) : (
+                                    <span className="w-5 h-5 rounded-full bg-muted shrink-0" />
+                                  )}
+                                  <span className={c.is_eliminated ? "line-through" : ""}>
+                                    {c.name}
+                                  </span>
+                                </span>
+                              ))}
                             </span>
                           )}
                         </Link>
                       </td>
                       <td className="hidden lg:table-cell px-3 sm:px-4 py-3">
-                        <div className="w-full bg-muted rounded-full h-2.5">
-                          <div
-                            className="bg-primary h-2.5 rounded-full transition-all"
-                            style={{ width: `${barWidth}%` }}
-                          />
-                        </div>
+                        {castawayList.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {castawayList.map((c) => (
+                              <span
+                                key={c.name}
+                                className={`inline-flex items-center gap-1 text-xs text-muted-foreground ${
+                                  c.is_eliminated ? "opacity-50" : ""
+                                }`}
+                              >
+                                {c.photo_url ? (
+                                  /* eslint-disable-next-line @next/next/no-img-element */
+                                  <img
+                                    src={c.photo_url}
+                                    alt={c.name}
+                                    className="rounded-full object-cover w-5 h-5 shrink-0"
+                                  />
+                                ) : (
+                                  <span className="w-5 h-5 rounded-full bg-muted shrink-0" />
+                                )}
+                                <span className={c.is_eliminated ? "line-through" : ""}>
+                                  {c.name}
+                                </span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 sm:px-4 py-3 text-right tabular-nums font-semibold">
                         {entry.total}

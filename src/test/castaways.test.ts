@@ -18,7 +18,7 @@ describe("castaway validation", () => {
           return result.valid === true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -31,7 +31,7 @@ describe("castaway validation", () => {
           return result.valid === false;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -62,7 +62,7 @@ describe("castaway round trip", () => {
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

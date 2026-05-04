@@ -1,35 +1,48 @@
 "use client";
 
 import { useState } from "react";
-import { proposeTradeAction } from "@/app/league/[id]/team/[userId]/actions";
+import { proposeTradeFromTradesPageAction } from "@/app/league/[id]/trades/actions";
 import SubmitButton from "./submit-button";
 
 interface Castaway {
   id: string;
   name: string;
   tribe: string | null;
-  is_eliminated: boolean;
 }
 
-interface TradeProposalFormProps {
+interface Player {
+  id: string;
+  display_name: string;
+  castaways: Castaway[];
+}
+
+interface Props {
   leagueId: string;
-  receiverId: string;
-  myActiveCastaways: Castaway[];
-  theirActiveCastaways: Castaway[];
+  myCastaways: Castaway[];
+  otherPlayers: Player[];
 }
 
-export default function TradeProposalForm({
+export default function TradeProposalWithPlayer({
   leagueId,
-  receiverId,
-  myActiveCastaways,
-  theirActiveCastaways,
-}: TradeProposalFormProps) {
+  myCastaways,
+  otherPlayers,
+}: Props) {
   const [showForm, setShowForm] = useState(false);
+  const [receiverId, setReceiverId] = useState("");
   const [myCastawayId, setMyCastawayId] = useState("");
   const [theirCastawayId, setTheirCastawayId] = useState("");
 
-  if (myActiveCastaways.length === 0 || theirActiveCastaways.length === 0) {
+  const selectedPlayer = otherPlayers.find((p) => p.id === receiverId);
+  const theirCastaways = selectedPlayer?.castaways ?? [];
+
+  if (myCastaways.length === 0 || otherPlayers.length === 0) {
     return null;
+  }
+
+  // Reset their castaway selection when player changes
+  function handlePlayerChange(playerId: string) {
+    setReceiverId(playerId);
+    setTheirCastawayId("");
   }
 
   if (!showForm) {
@@ -47,11 +60,31 @@ export default function TradeProposalForm({
     <div className="rounded-lg border border-border bg-card p-4 space-y-4">
       <h3 className="text-sm font-semibold">Propose a 1-for-1 Trade</h3>
 
-      <form action={proposeTradeAction} className="space-y-4">
+      <form action={proposeTradeFromTradesPageAction} className="space-y-4">
         <input type="hidden" name="league_id" value={leagueId} />
         <input type="hidden" name="receiver_id" value={receiverId} />
         <input type="hidden" name="proposer_castaway_id" value={myCastawayId} />
         <input type="hidden" name="receiver_castaway_id" value={theirCastawayId} />
+
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">
+            Trade with:
+          </label>
+          <select
+            value={receiverId}
+            onChange={(e) => handlePlayerChange(e.target.value)}
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            required
+          >
+            <option value="">Select a player...</option>
+            {otherPlayers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.display_name}
+                {p.castaways.length === 0 ? " (no castaways)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="space-y-2">
           <label className="text-xs font-medium text-muted-foreground">
@@ -64,7 +97,7 @@ export default function TradeProposalForm({
             required
           >
             <option value="">Select your castaway...</option>
-            {myActiveCastaways.map((c) => (
+            {myCastaways.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} {c.tribe ? `(${c.tribe})` : ""}
               </option>
@@ -81,9 +114,16 @@ export default function TradeProposalForm({
             onChange={(e) => setTheirCastawayId(e.target.value)}
             className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
             required
+            disabled={!receiverId || theirCastaways.length === 0}
           >
-            <option value="">Select their castaway...</option>
-            {theirActiveCastaways.map((c) => (
+            <option value="">
+              {!receiverId
+                ? "Select a player first..."
+                : theirCastaways.length === 0
+                ? "No active castaways"
+                : "Select their castaway..."}
+            </option>
+            {theirCastaways.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} {c.tribe ? `(${c.tribe})` : ""}
               </option>
@@ -94,14 +134,19 @@ export default function TradeProposalForm({
         <div className="flex gap-2">
           <SubmitButton
             pendingText="Sending…"
-            disabled={!myCastawayId || !theirCastawayId}
+            disabled={!receiverId || !myCastawayId || !theirCastawayId}
             className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
             Send Proposal
           </SubmitButton>
           <button
             type="button"
-            onClick={() => setShowForm(false)}
+            onClick={() => {
+              setShowForm(false);
+              setReceiverId("");
+              setMyCastawayId("");
+              setTheirCastawayId("");
+            }}
             className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
           >
             Cancel

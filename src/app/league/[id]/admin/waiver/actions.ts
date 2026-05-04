@@ -38,14 +38,14 @@ export async function processWaiversAction(formData: FormData) {
 
   const { data: rawClaims } = await supabase
     .from("waiver_claims")
-    .select("id, league_id, player_id, castaway_id, drop_castaway_id, bid_amount, status")
+    .select("id, league_id, player_id, castaway_id, drop_castaway_id, bid_amount, priority, status")
     .eq("league_id", leagueId)
     .eq("status", "pending");
 
   const pendingClaims: WaiverClaim[] = (rawClaims ?? []).map((c) => ({
     id: c.id, league_id: c.league_id, player_id: c.player_id,
     castaway_id: c.castaway_id, drop_castaway_id: c.drop_castaway_id,
-    bid_amount: c.bid_amount, status: c.status as "pending",
+    bid_amount: c.bid_amount, priority: c.priority, status: c.status as "pending",
   }));
 
   if (pendingClaims.length === 0) {

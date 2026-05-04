@@ -129,7 +129,7 @@ function LeagueCard({ league, isAdmin }: { league: League; isAdmin: boolean }) {
           href={`/league/${league.id}/leaderboard`}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
         >
-          Leaderboard
+          View League
         </Link>
         <InviteCopyButton inviteCode={league.invite_code} />
       </div>

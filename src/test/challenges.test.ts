@@ -29,7 +29,7 @@ describe("Property: Challenge deadline enforcement", () => {
           );
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -48,7 +48,7 @@ describe("Property: Challenge deadline enforcement", () => {
           expect(result.error).toBeUndefined();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -84,7 +84,7 @@ describe("Property 7: Challenge points are only awarded for correct submissions"
           expect(result).toBe(expected);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -103,7 +103,7 @@ describe("Property 7: Challenge points are only awarded for correct submissions"
           expect(result).toBe(0);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

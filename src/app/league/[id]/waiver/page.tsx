@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
-import { submitWaiverClaimAction } from "./actions";
+import { submitWaiverClaimAction, reorderWaiverClaimsAction, cancelWaiverClaimAction, editWaiverClaimAction } from "./actions";
 
 interface PageProps {
   params: { id: string };
@@ -77,11 +77,11 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
   // Get player's pending claims
   const { data: pendingClaims } = await supabase
     .from("waiver_claims")
-    .select("id, castaway_id, drop_castaway_id, bid_amount, status, submitted_at")
+    .select("id, castaway_id, drop_castaway_id, bid_amount, status, submitted_at, priority")
     .eq("league_id", leagueId)
     .eq("player_id", user.id)
     .eq("status", "pending")
-    .order("submitted_at", { ascending: false });
+    .order("priority", { ascending: true });
 
   // Build a name lookup map
   const castawayNameMap = new Map(
@@ -116,31 +116,142 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
           </p>
         </div>
 
-        {/* Pending claims */}
+        {/* Pending claims with priority controls */}
         {(pendingClaims ?? []).length > 0 && (
           <div className="space-y-2">
-            <h2 className="text-sm font-semibold">Your Pending Claims</h2>
-            <div className="space-y-2">
-              {(pendingClaims ?? []).map((claim) => (
-                <div
-                  key={claim.id}
-                  className="rounded border border-border bg-card p-3 flex items-center justify-between text-sm"
-                >
-                  <span>
-                    Claiming{" "}
-                    <span className="font-medium">
-                      {castawayNameMap.get(claim.castaway_id) ?? "Unknown"}
-                    </span>{" "}
-                    · Dropping{" "}
-                    <span className="font-medium">
-                      {castawayNameMap.get(claim.drop_castaway_id) ?? "Unknown"}
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    Bid: {claim.bid_amount}
-                  </span>
-                </div>
-              ))}
+            <h2 className="text-sm font-semibold">Your Pending Claims (by priority)</h2>
+            <p className="text-xs text-muted-foreground">
+              Higher priority claims are processed first when bids are equal.
+              Use the arrows to reorder, pencil to edit, or ✕ to cancel.
+            </p>
+            <div className="space-y-3">
+              {(pendingClaims ?? []).map((claim, index) => {
+                const claims = pendingClaims ?? [];
+                const moveUpIds = [...claims.map((c) => c.id)];
+                if (index > 0) {
+                  [moveUpIds[index - 1], moveUpIds[index]] = [moveUpIds[index], moveUpIds[index - 1]];
+                }
+                const moveDownIds = [...claims.map((c) => c.id)];
+                if (index < claims.length - 1) {
+                  [moveDownIds[index], moveDownIds[index + 1]] = [moveDownIds[index + 1], moveDownIds[index]];
+                }
+
+                return (
+                  <div
+                    key={claim.id}
+                    className="rounded border border-border bg-card p-3 space-y-2"
+                  >
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="text-xs text-muted-foreground font-mono w-5 shrink-0 text-center">
+                        #{index + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <span>
+                          Claim{" "}
+                          <span className="font-medium">
+                            {castawayNameMap.get(claim.castaway_id) ?? "Unknown"}
+                          </span>{" "}
+                          · Drop{" "}
+                          <span className="font-medium">
+                            {castawayNameMap.get(claim.drop_castaway_id) ?? "Unknown"}
+                          </span>
+                        </span>
+                        <span className="text-muted-foreground ml-2">
+                          Bid: ${claim.bid_amount}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {index > 0 && (
+                          <form action={reorderWaiverClaimsAction}>
+                            <input type="hidden" name="league_id" value={leagueId} />
+                            <input type="hidden" name="claim_ids" value={moveUpIds.join(",")} />
+                            <button
+                              type="submit"
+                              className="rounded border border-border px-2 py-1 text-xs hover:bg-muted transition-colors min-h-[32px]"
+                              aria-label="Move up"
+                            >
+                              ↑
+                            </button>
+                          </form>
+                        )}
+                        {index < claims.length - 1 && (
+                          <form action={reorderWaiverClaimsAction}>
+                            <input type="hidden" name="league_id" value={leagueId} />
+                            <input type="hidden" name="claim_ids" value={moveDownIds.join(",")} />
+                            <button
+                              type="submit"
+                              className="rounded border border-border px-2 py-1 text-xs hover:bg-muted transition-colors min-h-[32px]"
+                              aria-label="Move down"
+                            >
+                              ↓
+                            </button>
+                          </form>
+                        )}
+                        <form action={cancelWaiverClaimAction}>
+                          <input type="hidden" name="league_id" value={leagueId} />
+                          <input type="hidden" name="claim_id" value={claim.id} />
+                          <button
+                            type="submit"
+                            className="rounded border border-destructive/30 text-destructive px-2 py-1 text-xs hover:bg-destructive/10 transition-colors min-h-[32px]"
+                            aria-label="Cancel claim"
+                          >
+                            ✕
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                    {/* Inline edit form */}
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                        Edit claim
+                      </summary>
+                      <form
+                        action={editWaiverClaimAction}
+                        className="mt-2 space-y-2 border-t border-border pt-2"
+                      >
+                        <input type="hidden" name="league_id" value={leagueId} />
+                        <input type="hidden" name="claim_id" value={claim.id} />
+
+                        <label className="block text-xs font-medium">
+                          Drop castaway
+                        </label>
+                        <select
+                          name="drop_castaway_id"
+                          defaultValue={claim.drop_castaway_id}
+                          required
+                          className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm"
+                        >
+                          {playerCastaways.map((pc) => (
+                            <option key={pc.id} value={pc.id}>
+                              {pc.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <label className="block text-xs font-medium">
+                          Bid amount (0–{membership.waiver_budget_remaining})
+                        </label>
+                        <input
+                          type="number"
+                          name="bid_amount"
+                          min={0}
+                          max={membership.waiver_budget_remaining}
+                          defaultValue={claim.bid_amount}
+                          required
+                          className="w-full rounded border border-input bg-background px-3 py-1.5 text-sm"
+                        />
+
+                        <SubmitButton
+                          pendingText="Saving…"
+                          className="rounded bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 transition-colors min-h-[36px] disabled:opacity-50"
+                        >
+                          Save Changes
+                        </SubmitButton>
+                      </form>
+                    </details>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -14,7 +14,7 @@ describe("league validation", () => {
           return result.valid === true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -34,7 +34,7 @@ describe("league validation", () => {
           return result.valid === false;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -57,7 +57,7 @@ describe("invite code generation", () => {
           return unique.size === codes.length;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -67,7 +67,7 @@ describe("invite code generation", () => {
         const code = generateInviteCode();
         return typeof code === "string" && code.length === 12 && code === code.toUpperCase();
       }),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

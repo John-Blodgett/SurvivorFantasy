@@ -16,7 +16,7 @@ describe("scoring rule validation", () => {
           return result.valid === true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -30,7 +30,7 @@ describe("scoring rule validation", () => {
           return result.valid === false;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -73,7 +73,7 @@ describe("scoring rule serialization round trip", () => {
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

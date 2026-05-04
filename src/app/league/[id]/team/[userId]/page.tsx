@@ -104,7 +104,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
   const { data: episodeEventsRaw } = await supabase
     .from("episode_events")
     .select(
-      "castaway_id, points, scoring_rules(name), episodes!inner(league_id, number, is_finalized)"
+      "castaway_id, points, player_id, scoring_rules(name), episodes!inner(league_id, number, is_finalized)"
     )
     .eq("episodes.league_id", leagueId)
     .eq("episodes.is_finalized", true);
@@ -114,6 +114,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
       episode_number: (e.episodes as Record<string, unknown>).number as number,
       castaway_id: e.castaway_id as string,
       points: e.points as number,
+      player_id: (e.player_id as string | null) ?? undefined,
     })
   );
 
@@ -148,6 +149,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
 
   // Compute the full score breakdown
   const scoreBreakdown = computePlayerScore(
+    targetUserId,
     teamAssignments,
     allEpisodeEvents,
     eliminatedCastaways,

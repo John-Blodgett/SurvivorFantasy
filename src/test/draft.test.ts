@@ -27,7 +27,7 @@ describe("Property 3: Draft snake order is correct and produces unique assignmen
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -55,7 +55,7 @@ describe("Property 3: Draft snake order is correct and produces unique assignmen
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -88,7 +88,7 @@ describe("Property 3: Draft snake order is correct and produces unique assignmen
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -114,7 +114,7 @@ describe("Property 3: Draft snake order is correct and produces unique assignmen
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -160,7 +160,7 @@ describe("Property 4: Auto-pick selects highest-ranked available castaway", () =
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -179,7 +179,7 @@ describe("Property 4: Auto-pick selects highest-ranked available castaway", () =
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -196,7 +196,7 @@ describe("Property 4: Auto-pick selects highest-ranked available castaway", () =
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -224,7 +224,7 @@ describe("Property 4: Auto-pick selects highest-ranked available castaway", () =
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

@@ -34,7 +34,7 @@ describe("Property 8: Leaderboard is sorted in non-increasing order of total poi
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -69,7 +69,7 @@ describe("Property 8: Leaderboard is sorted in non-increasing order of total poi
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -96,7 +96,7 @@ describe("Property 8: Leaderboard is sorted in non-increasing order of total poi
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

@@ -29,6 +29,7 @@ interface DraftState {
   id: string;
   status: string;
   currentPickIndex: number;
+  pickStartedAt: string | null;
 }
 
 interface Props {
@@ -64,6 +65,7 @@ export default function DraftRoom({
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoPickFiredRef = useRef(false);
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
 
   const playerMap = Object.fromEntries(players.map((p) => [p.id, p]));
   const castawayMap = Object.fromEntries(allCastaways.map((c) => [c.id, c]));
@@ -76,32 +78,30 @@ export default function DraftRoom({
       : null;
   const isMyTurn = currentPickerId === currentUserId;
 
-  // Reset timer when pick index changes
+  // Recompute time left when pick_started_at changes (synced across all clients)
   useEffect(() => {
-    setTimeLeft(pickTimerSeconds);
+    setTimeLeft(computeTimeLeft(draft.pickStartedAt, pickTimerSeconds));
     autoPickFiredRef.current = false;
-  }, [currentPickIndex, pickTimerSeconds]);
+  }, [draft.pickStartedAt, pickTimerSeconds]);
 
-  // Countdown timer
+  // Countdown timer — ticks every second, computing from server timestamp
   useEffect(() => {
     if (isComplete || !currentPickerId) return;
 
     if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const remaining = computeTimeLeft(draft.pickStartedAt, pickTimerSeconds);
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(timerRef.current!);
+      }
     }, 1000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [currentPickIndex, isComplete, currentPickerId]);
+  }, [draft.pickStartedAt, isComplete, currentPickerId, pickTimerSeconds]);
 
   // Auto-pick when timer hits 0 — any client can trigger this; the API
   // guards against duplicate/stale requests via pickIndex comparison.
@@ -109,6 +109,10 @@ export default function DraftRoom({
     if (autoPickFiredRef.current) return;
     autoPickFiredRef.current = true;
     setPicking(true);
+    console.log("[draft-room] Timer expired, triggering auto-pick", {
+      leagueId,
+      pickIndex: currentPickIndex,
+    });
     try {
       const res = await fetch("/api/draft/auto-pick", {
         method: "POST",
@@ -116,8 +120,43 @@ export default function DraftRoom({
         body: JSON.stringify({ leagueId, pickIndex: currentPickIndex }),
       });
       const data = await res.json();
-      if (!res.ok && data.error) setError(data.error);
-    } catch {
+      console.log("[draft-room] Auto-pick response", { status: res.status, data });
+      if (!res.ok && data.error) {
+        setError(data.error);
+      } else if (data.success && data.pick) {
+        console.log("[draft-room] Auto-pick succeeded, broadcasting");
+
+        // Update local state immediately
+        const newPick = data.pick;
+        setPicks((prev) => {
+          if (prev.some((p: Pick) => p.id === newPick.id)) return prev;
+          return [...prev, newPick];
+        });
+        setAvailable((prev: Castaway[]) => prev.filter((c) => c.id !== newPick.castaway_id));
+        setDraft((prev) => ({
+          ...prev,
+          status: data.draftStatus,
+          currentPickIndex: data.currentPickIndex,
+          pickStartedAt: data.pickStartedAt,
+        }));
+
+        // Broadcast to other clients
+        if (channelRef.current) {
+          await channelRef.current.send({
+            type: "broadcast",
+            event: "draft_pick",
+            payload: {
+              pick: data.pick,
+              draftStatus: data.draftStatus,
+              currentPickIndex: data.currentPickIndex,
+              pickStartedAt: data.pickStartedAt,
+            },
+          });
+          console.log("[draft-room] Auto-pick broadcast sent");
+        }
+      }
+    } catch (err) {
+      console.error("[draft-room] Auto-pick fetch failed", err);
       setError("Failed to auto-pick. Please refresh.");
     }
     setPicking(false);
@@ -129,67 +168,74 @@ export default function DraftRoom({
     }
   }, [timeLeft, picking, isComplete, currentPickerId, handleAutoPick]);
 
-  // Supabase Realtime subscription on draft_picks
+  // Supabase Broadcast subscription — listens for pick events sent by other clients
   useEffect(() => {
     const supabase = createClient();
 
+    console.log("[draft-room] Setting up Broadcast subscription", { leagueId });
+
     const channel = supabase
-      .channel(`draft-picks-${leagueId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "draft_picks",
-        },
-        (payload) => {
-          const newPick = payload.new as Pick;
-          setPicks((prev) => {
-            if (prev.some((p) => p.id === newPick.id)) return prev;
-            return [...prev, newPick];
-          });
-          // Remove from available
-          setAvailable((prev) =>
-            prev.filter((c) => c.id !== newPick.castaway_id)
-          );
-          // Advance pick index
-          setDraft((prev) => ({
-            ...prev,
-            currentPickIndex: newPick.pick_number,
-          }));
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "drafts",
-          filter: `league_id=eq.${leagueId}`,
-        },
-        (payload) => {
-          const updated = payload.new as {
-            status: string;
-            current_pick_index: number;
-          };
-          setDraft((prev) => ({
-            ...prev,
-            status: updated.status,
-            currentPickIndex: updated.current_pick_index,
-          }));
-        }
-      )
-      .subscribe();
+      .channel(`draft-broadcast-${leagueId}`)
+      .on("broadcast", { event: "draft_pick" }, (payload) => {
+        const data = payload.payload as {
+          pick: Pick;
+          draftStatus: string;
+          currentPickIndex: number;
+          pickStartedAt: string | null;
+        };
+        console.log("[draft-room] Broadcast: pick received", data);
+
+        setPicks((prev) => {
+          if (prev.some((p) => p.id === data.pick.id)) return prev;
+          return [...prev, data.pick];
+        });
+        setAvailable((prev) =>
+          prev.filter((c) => c.id !== data.pick.castaway_id)
+        );
+        setDraft((prev) => ({
+          ...prev,
+          status: data.draftStatus,
+          currentPickIndex: data.currentPickIndex,
+          pickStartedAt: data.pickStartedAt,
+        }));
+      })
+      .subscribe((status, err) => {
+        console.log("[draft-room] Broadcast subscription status:", status, err ?? "");
+      });
+
+    channelRef.current = channel;
 
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [leagueId]);
 
   async function handlePick(castawayId: string) {
-    if (!isMyTurn || picking) return;
+    // Double-check turn enforcement — the server also validates this,
+    // but we guard here to avoid unnecessary round-trips.
+    if (picking) {
+      console.log("[draft-room] Pick already in progress, ignoring click");
+      return;
+    }
+    if (!isMyTurn) {
+      console.warn("[draft-room] Not my turn, ignoring pick attempt", {
+        currentPickerId,
+        currentUserId,
+        currentPickIndex: draft.currentPickIndex,
+      });
+      setError("It's not your turn to pick.");
+      return;
+    }
+
     setPicking(true);
     setError(null);
+
+    console.log("[draft-room] Submitting pick", {
+      castawayId,
+      currentPickIndex: draft.currentPickIndex,
+      currentUserId,
+    });
 
     const formData = new FormData();
     formData.set("league_id", leagueId);
@@ -197,7 +243,39 @@ export default function DraftRoom({
 
     const result = await makeDraftPickAction(formData);
     if (result.error) {
+      console.error("[draft-room] Pick failed", { error: result.error });
       setError(result.error);
+    } else {
+      console.log("[draft-room] Pick succeeded, broadcasting");
+
+      // Update local state immediately (broadcast doesn't echo back to sender)
+      const newPick = result.pick!;
+      setPicks((prev) => {
+        if (prev.some((p) => p.id === newPick.id)) return prev;
+        return [...prev, newPick];
+      });
+      setAvailable((prev) => prev.filter((c) => c.id !== newPick.castaway_id));
+      setDraft((prev) => ({
+        ...prev,
+        status: result.draftStatus!,
+        currentPickIndex: result.currentPickIndex!,
+        pickStartedAt: result.pickStartedAt ?? null,
+      }));
+
+      // Broadcast to other clients
+      if (channelRef.current) {
+        await channelRef.current.send({
+          type: "broadcast",
+          event: "draft_pick",
+          payload: {
+            pick: result.pick,
+            draftStatus: result.draftStatus,
+            currentPickIndex: result.currentPickIndex,
+            pickStartedAt: result.pickStartedAt,
+          },
+        });
+        console.log("[draft-room] Broadcast sent");
+      }
     }
     setPicking(false);
   }
@@ -455,6 +533,16 @@ export default function DraftRoom({
       </section>
     </main>
   );
+}
+
+/**
+ * Compute seconds remaining from a server-provided pick_started_at timestamp.
+ * All clients derive the same value from the same timestamp, keeping timers in sync.
+ */
+function computeTimeLeft(pickStartedAt: string | null, pickTimerSeconds: number): number {
+  if (!pickStartedAt) return pickTimerSeconds;
+  const elapsed = (Date.now() - new Date(pickStartedAt).getTime()) / 1000;
+  return Math.max(0, Math.round(pickTimerSeconds - elapsed));
 }
 
 function TimerIcon() {

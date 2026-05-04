@@ -44,6 +44,7 @@ export interface WaiverClaim {
   castaway_id: string;
   drop_castaway_id: string;
   bid_amount: number;
+  priority: number;
   status: "pending" | "won" | "lost";
 }
 
@@ -149,12 +150,16 @@ export function validateWaiverClaim(
 
 /**
  * Processes all pending waiver claims for a league.
- * Groups claims by target castaway, resolves each group by highest bid
- * (random tiebreak), updates assignments and budgets.
+ *
+ * Processing order:
+ * 1. Group claims by target castaway
+ * 2. For each target, pick the winner by highest bid (priority as tiebreak, then random)
+ * 3. When a player wins a claim, invalidate their lower-priority claims that
+ *    share the same drop castaway (since that castaway is no longer available to drop)
  *
  * Requirements: 18.4, 18.5, 18.6, 18.8, 18.9
  *
- * @param claims - All pending claims to process
+ * @param claims - All pending claims to process (should include priority field)
  * @param nextEpisodeNumber - The episode number to set as points_from_episode for new assignments
  * @param randomTiebreak - Function to pick a winner index from tied claims (for testability)
  */
@@ -168,27 +173,58 @@ export function processWaiverClaims(
     return { results: [], newAssignments: [] };
   }
 
-  // Group claims by target castaway
+  const results: ProcessedClaimResult[] = [];
+  const newAssignments: WaiverProcessingResult["newAssignments"] = [];
+
+  // Track which castaways have been won (no longer available)
+  const wonCastawayIds = new Set<string>();
+  // Track which drop castaways have been used by each player
+  const usedDropsByPlayer = new Map<string, Set<string>>();
+
+  // Sort all claims: highest bid first, then lowest priority number (highest priority), then random
+  const sortedClaims = [...claims].sort((a, b) => {
+    if (b.bid_amount !== a.bid_amount) return b.bid_amount - a.bid_amount;
+    if (a.priority !== b.priority) return a.priority - b.priority;
+    return 0;
+  });
+
+  // Group by target castaway, preserving sort order within groups
   const claimsByTarget = new Map<string, WaiverClaim[]>();
-  for (const claim of claims) {
+  for (const claim of sortedClaims) {
     const group = claimsByTarget.get(claim.castaway_id) ?? [];
     group.push(claim);
     claimsByTarget.set(claim.castaway_id, group);
   }
 
-  const results: ProcessedClaimResult[] = [];
-  const newAssignments: WaiverProcessingResult["newAssignments"] = [];
-
+  // Process each target castaway group
   for (const [castawayId, groupClaims] of Array.from(claimsByTarget.entries())) {
-    // Find the highest bid
-    const maxBid = Math.max(...groupClaims.map((c: WaiverClaim) => c.bid_amount));
+    // Filter out claims from players whose drop castaway is already used
+    const eligibleClaims = groupClaims.filter((c) => {
+      const usedDrops = usedDropsByPlayer.get(c.player_id);
+      return !usedDrops?.has(c.drop_castaway_id);
+    });
 
-    // Find all claims with the highest bid
-    const tiedClaims = groupClaims.filter((c: WaiverClaim) => c.bid_amount === maxBid);
+    if (eligibleClaims.length === 0) {
+      // All claims for this castaway are invalid — mark them lost
+      for (const claim of groupClaims) {
+        if (!results.some((r) => r.claim_id === claim.id)) {
+          results.push({ claim_id: claim.id, status: "lost", budget_deducted: 0 });
+        }
+      }
+      continue;
+    }
 
-    // Pick a winner (random tiebreak if multiple)
-    const winnerIndex = tiedClaims.length === 1 ? 0 : randomTiebreak(tiedClaims.length);
-    const winner = tiedClaims[winnerIndex];
+    // Find the highest bid among eligible claims
+    const maxBid = Math.max(...eligibleClaims.map((c) => c.bid_amount));
+    const tiedClaims = eligibleClaims.filter((c) => c.bid_amount === maxBid);
+
+    // Among tied bids, pick by priority (lowest number = highest priority)
+    const bestPriority = Math.min(...tiedClaims.map((c) => c.priority));
+    const priorityTied = tiedClaims.filter((c) => c.priority === bestPriority);
+
+    // Random tiebreak if still tied
+    const winnerIndex = priorityTied.length === 1 ? 0 : randomTiebreak(priorityTied.length);
+    const winner = priorityTied[winnerIndex];
 
     // Mark winner
     results.push({
@@ -204,15 +240,26 @@ export function processWaiverClaims(
       points_from_episode: nextEpisodeNumber,
     });
 
-    // Mark all losers
+    wonCastawayIds.add(castawayId);
+
+    // Track that this player used this drop castaway
+    if (!usedDropsByPlayer.has(winner.player_id)) {
+      usedDropsByPlayer.set(winner.player_id, new Set());
+    }
+    usedDropsByPlayer.get(winner.player_id)!.add(winner.drop_castaway_id);
+
+    // Mark all other claims for this castaway as lost
     for (const claim of groupClaims) {
-      if (claim.id !== winner.id) {
-        results.push({
-          claim_id: claim.id,
-          status: "lost",
-          budget_deducted: 0,
-        });
+      if (claim.id !== winner.id && !results.some((r) => r.claim_id === claim.id)) {
+        results.push({ claim_id: claim.id, status: "lost", budget_deducted: 0 });
       }
+    }
+  }
+
+  // Mark any remaining unprocessed claims as lost
+  for (const claim of claims) {
+    if (!results.some((r) => r.claim_id === claim.id)) {
+      results.push({ claim_id: claim.id, status: "lost", budget_deducted: 0 });
     }
   }
 

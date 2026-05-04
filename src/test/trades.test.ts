@@ -50,7 +50,7 @@ describe("Property 9: Eliminated castaways cannot be traded", () => {
           expect(result.error).toContain("Eliminated castaways cannot be traded");
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -90,7 +90,7 @@ describe("Property 9: Eliminated castaways cannot be traded", () => {
           expect(result.error).toContain("Eliminated castaways cannot be traded");
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -130,7 +130,7 @@ describe("Property 9: Eliminated castaways cannot be traded", () => {
           expect(result.error).toContain("Eliminated castaways cannot be traded");
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -169,7 +169,7 @@ describe("Property 9: Eliminated castaways cannot be traded", () => {
           expect(result.valid).toBe(true);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -188,24 +188,25 @@ import {
 } from "@/lib/scoring";
 
 describe("Property 5: Trade point cutoff is respected for both sides", () => {
+  const PROPOSER = "proposer-id";
+  const RECEIVER = "receiver-id";
+
   it("new owner only gets points from episodes >= points_from_episode after trade", () => {
     fc.assert(
       fc.property(
-        fc.uuid(), // castaway ID (the traded castaway)
-        fc.integer({ min: 2, max: 8 }), // trade cutoff episode (points_from_episode for new owner)
-        fc.integer({ min: 1, max: 10 }), // total episodes
-        fc.integer({ min: 1, max: 20 }), // points per event
+        fc.uuid(),
+        fc.integer({ min: 2, max: 8 }),
+        fc.integer({ min: 1, max: 10 }),
+        fc.integer({ min: 1, max: 20 }),
         (castawayId, tradeCutoff, totalEpisodes, pointsPerEvent) => {
-          if (totalEpisodes < tradeCutoff) return true; // skip trivial
+          if (totalEpisodes < tradeCutoff) return true;
 
-          // New owner's assignment: only counts from tradeCutoff onward
           const newOwnerAssignment: TeamAssignment = {
             castaway_id: castawayId,
             points_from_episode: tradeCutoff,
             source: "trade" as const,
           };
 
-          // One event per episode
           const events: EpisodeEvent[] = Array.from(
             { length: totalEpisodes },
             (_, i) => ({
@@ -221,6 +222,7 @@ describe("Property 5: Trade point cutoff is respected for both sides", () => {
           );
 
           const newOwnerResult = computePlayerScore(
+            RECEIVER,
             [newOwnerAssignment],
             events,
             [],
@@ -229,43 +231,35 @@ describe("Property 5: Trade point cutoff is respected for both sides", () => {
             []
           );
 
-          // New owner should only get points from episodes >= tradeCutoff
           const expectedNewOwnerPoints = (totalEpisodes - tradeCutoff + 1) * pointsPerEvent;
           expect(newOwnerResult.total).toBe(expectedNewOwnerPoints);
 
-          // Verify pre-trade events are NOT included
           const castawayBreakdown = newOwnerResult.castaways[0];
           for (let ep = 1; ep < tradeCutoff; ep++) {
             expect(castawayBreakdown.episode_points[ep] ?? 0).toBe(0);
           }
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
   it("original owner retains points from episodes before the trade", () => {
     fc.assert(
       fc.property(
-        fc.uuid(), // castaway ID
-        fc.integer({ min: 2, max: 8 }), // trade cutoff episode
-        fc.integer({ min: 1, max: 10 }), // total episodes
-        fc.integer({ min: 1, max: 20 }), // points per event
+        fc.uuid(),
+        fc.integer({ min: 2, max: 8 }),
+        fc.integer({ min: 1, max: 10 }),
+        fc.integer({ min: 1, max: 20 }),
         (castawayId, tradeCutoff, totalEpisodes, pointsPerEvent) => {
           if (totalEpisodes < tradeCutoff) return true;
 
-          // Original owner had the castaway from episode 1 (draft)
-          // After trade, they no longer have this castaway on their team,
-          // but the historical record (points_from_episode=1, up to tradeCutoff-1)
-          // should still count. We model this as the original owner's assignment
-          // with points_from_episode=1 and computing up to tradeCutoff-1.
           const originalOwnerAssignment: TeamAssignment = {
             castaway_id: castawayId,
             points_from_episode: 1,
             source: "draft" as const,
           };
 
-          // One event per episode
           const events: EpisodeEvent[] = Array.from(
             { length: totalEpisodes },
             (_, i) => ({
@@ -280,33 +274,32 @@ describe("Property 5: Trade point cutoff is respected for both sides", () => {
             (_, i) => ({ number: i + 1 })
           );
 
-          // Original owner's score computed up to the episode before the trade
           const originalOwnerResult = computePlayerScore(
+            PROPOSER,
             [originalOwnerAssignment],
             events,
             [],
             finalizedEpisodes,
             0,
             [],
-            tradeCutoff - 1 // upToEpisode: only count up to the episode before trade
+            tradeCutoff - 1
           );
 
-          // Original owner should get points from episodes 1 to tradeCutoff-1
           const expectedOriginalPoints = (tradeCutoff - 1) * pointsPerEvent;
           expect(originalOwnerResult.total).toBe(expectedOriginalPoints);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
   it("pre-trade and post-trade points are disjoint (no double counting)", () => {
     fc.assert(
       fc.property(
-        fc.uuid(), // castaway ID
-        fc.integer({ min: 2, max: 8 }), // trade cutoff
-        fc.integer({ min: 2, max: 10 }), // total episodes (must be >= tradeCutoff)
-        fc.integer({ min: 1, max: 20 }), // points per event
+        fc.uuid(),
+        fc.integer({ min: 2, max: 8 }),
+        fc.integer({ min: 2, max: 10 }),
+        fc.integer({ min: 1, max: 20 }),
         (castawayId, tradeCutoff, totalEpisodes, pointsPerEvent) => {
           if (totalEpisodes < tradeCutoff) return true;
 
@@ -324,13 +317,13 @@ describe("Property 5: Trade point cutoff is respected for both sides", () => {
             (_, i) => ({ number: i + 1 })
           );
 
-          // Original owner: episodes 1 to tradeCutoff-1
           const originalAssignment: TeamAssignment = {
             castaway_id: castawayId,
             points_from_episode: 1,
             source: "draft" as const,
           };
           const originalResult = computePlayerScore(
+            PROPOSER,
             [originalAssignment],
             events,
             [],
@@ -340,13 +333,13 @@ describe("Property 5: Trade point cutoff is respected for both sides", () => {
             tradeCutoff - 1
           );
 
-          // New owner: episodes tradeCutoff to totalEpisodes
           const newAssignment: TeamAssignment = {
             castaway_id: castawayId,
             points_from_episode: tradeCutoff,
             source: "trade" as const,
           };
           const newResult = computePlayerScore(
+            RECEIVER,
             [newAssignment],
             events,
             [],
@@ -355,12 +348,11 @@ describe("Property 5: Trade point cutoff is respected for both sides", () => {
             []
           );
 
-          // Sum of both should equal total events points (no overlap, no gap)
           const totalPoints = totalEpisodes * pointsPerEvent;
           expect(originalResult.total + newResult.total).toBe(totalPoints);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });

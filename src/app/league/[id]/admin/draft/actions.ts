@@ -56,19 +56,22 @@ export async function startDraftAction(formData: FormData) {
   }
 
   if (!existing) {
+    const now = new Date().toISOString();
     const { error } = await supabase.from("drafts").insert({
       league_id: leagueId,
       status: "active",
       current_pick_index: 0,
-      started_at: new Date().toISOString(),
+      started_at: now,
+      pick_started_at: now,
     });
     if (error) {
       redirect(`${basePath}?error=${encodeURIComponent("Failed to start draft.")}`);
     }
   } else {
+    const now = new Date().toISOString();
     await supabase
       .from("drafts")
-      .update({ status: "active", started_at: new Date().toISOString() })
+      .update({ status: "active", started_at: now, pick_started_at: now })
       .eq("id", existing.id);
   }
 

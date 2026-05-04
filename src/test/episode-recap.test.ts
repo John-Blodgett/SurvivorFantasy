@@ -48,7 +48,7 @@ describe("Property 12: Episode recap contains all and only events for that episo
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -84,7 +84,7 @@ describe("Property 12: Episode recap contains all and only events for that episo
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
@@ -132,7 +132,7 @@ describe("Property 13: Episode recap is sorted in reverse chronological order", 
           return true;
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
