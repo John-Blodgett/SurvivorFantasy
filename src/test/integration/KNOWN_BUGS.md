@@ -33,7 +33,17 @@ it.fails("BUG: Trade acceptance should fail for eliminated castaways — Req 7.6
 
 ## Active Bugs
 
-_No active bugs. All discovered issues have been resolved._
+### BUG-002: Waiver processing does not verify drop castaway ownership at processing time
+
+| Field | Value |
+|-------|-------|
+| **Test file** | `src/test/integration/edge-cases.test.ts` |
+| **Test name** | `BUG: should invalidate waiver claim when drop castaway was traded away before processing — Req 8.5` |
+| **Expected** | If a player submits a waiver claim dropping Castaway B, then trades Castaway B away before waivers are processed, the claim should be marked "lost" (not "won") because the player no longer owns the drop castaway |
+| **Actual** | The claim is marked "won" and the waiver processes successfully, even though the player no longer owns the drop castaway. This could result in a player having more castaways than roster_size allows. |
+| **Requirement** | Req 8.5 |
+| **Discovered** | 2026-05-14 |
+| **Resolution** | The `processWaiverClaims` function needs to verify current ownership of the drop castaway at processing time, not just at submission time |
 
 ---
 

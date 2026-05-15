@@ -439,4 +439,178 @@ describe("Integration: Edge Cases", () => {
     expect(result.error).toBeDefined();
     expect(result.error!.toLowerCase()).toContain("no pending claims");
   });
+
+  // ---------------------------------------------------------------------------
+  // Race condition: Receiver's castaway gets traded away before trade acceptance
+  // ---------------------------------------------------------------------------
+
+  it("should fail trade acceptance when receiver's castaway was traded away before acceptance", async () => {
+    const admin = getAdminClient();
+
+    // Get Player 4 and Player 5's non-eliminated castaways
+    const { data: p4Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[3]);
+    const { data: p5Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[4]);
+    const { data: p6Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[5]);
+
+    if (!p4Assignments?.length || !p5Assignments?.length || !p6Assignments?.length) return;
+
+    // Find non-eliminated castaways
+    let p4Castaway: string | undefined;
+    for (const a of p4Assignments) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { p4Castaway = a.castaway_id; break; }
+    }
+    let p5Castaway: string | undefined;
+    for (const a of p5Assignments) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { p5Castaway = a.castaway_id; break; }
+    }
+    let p6Castaway: string | undefined;
+    for (const a of p6Assignments) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { p6Castaway = a.castaway_id; break; }
+    }
+
+    if (!p4Castaway || !p5Castaway || !p6Castaway) return;
+
+    // Player 4 proposes trade: offers p4Castaway for p5Castaway (owned by Player 5)
+    const tradeProposal = await proposeTrade(
+      leagueId,
+      playerIds[3],
+      playerIds[4],
+      p4Castaway,
+      p5Castaway
+    );
+    expect(tradeProposal.error).toBeUndefined();
+
+    // Before Player 5 accepts, Player 5 trades p5Castaway to Player 6
+    const sneakyTrade = await proposeTrade(
+      leagueId,
+      playerIds[4],
+      playerIds[5],
+      p5Castaway,
+      p6Castaway
+    );
+    expect(sneakyTrade.error).toBeUndefined();
+    const sneakyAccept = await acceptTrade(sneakyTrade.tradeId!, playerIds[5]);
+    expect(sneakyAccept.error).toBeUndefined();
+
+    // Now Player 5 tries to accept the original trade — should fail
+    // because Player 5 no longer owns p5Castaway
+    const acceptResult = await acceptTrade(tradeProposal.tradeId!, playerIds[4]);
+    expect(acceptResult.error).toBeDefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Race condition: Waiver claim drops a castaway that was traded away before processing
+  // BUG: Waiver processing does not verify drop castaway ownership at processing time — Req 8.5
+  // ---------------------------------------------------------------------------
+
+  it.fails("BUG: should invalidate waiver claim when drop castaway was traded away before processing — Req 8.5", async () => {
+    const admin = getAdminClient();
+
+    // Clean up pending claims
+    await admin.from("waiver_claims").delete().eq("league_id", leagueId).eq("status", "pending");
+
+    // Find a player with a castaway to drop and an unassigned target
+    const { data: p2Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1]);
+
+    if (!p2Assignments?.length) return;
+
+    // Find a non-eliminated castaway owned by Player 2
+    let p2DropCastaway: string | undefined;
+    for (const a of p2Assignments) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { p2DropCastaway = a.castaway_id; break; }
+    }
+    if (!p2DropCastaway) return;
+
+    // Find an unassigned, non-eliminated castaway for the waiver target
+    const { data: allAssignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId);
+    const assignedIds = new Set((allAssignments ?? []).map((a) => a.castaway_id));
+
+    let targetCastaway: string | undefined;
+    for (const cid of castawayIds) {
+      if (assignedIds.has(cid)) continue;
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", cid).single();
+      if (c && !c.is_eliminated) { targetCastaway = cid; break; }
+    }
+    if (!targetCastaway) return;
+
+    // Player 2 submits a waiver claim: pick up targetCastaway, drop p2DropCastaway
+    const claim = await submitWaiverClaim(
+      leagueId,
+      playerIds[1],
+      targetCastaway,
+      p2DropCastaway,
+      5
+    );
+    expect(claim.error).toBeUndefined();
+
+    // Before waivers are processed, Player 2 trades p2DropCastaway to another player
+    // Find another player's castaway for the trade
+    const { data: p3Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[2]);
+
+    let p3Castaway: string | undefined;
+    for (const a of (p3Assignments ?? [])) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { p3Castaway = a.castaway_id; break; }
+    }
+
+    if (p3Castaway) {
+      const tradeResult = await proposeTrade(
+        leagueId,
+        playerIds[1],
+        playerIds[2],
+        p2DropCastaway,
+        p3Castaway
+      );
+
+      if (!tradeResult.error) {
+        await acceptTrade(tradeResult.tradeId!, playerIds[2]);
+      }
+    }
+
+    // Now process waivers — the claim should fail because Player 2
+    // no longer owns the drop castaway
+    const processResult = await processWaivers(leagueId);
+
+    // The waiver processing should either:
+    // 1. Mark the claim as "lost" (because drop castaway is no longer owned)
+    // 2. Or return an error
+    // Either way, the claim should NOT be "won"
+    const { data: claimResult } = await admin
+      .from("waiver_claims")
+      .select("status")
+      .eq("id", claim.claimId!)
+      .single();
+
+    // The claim should not have been won since the drop castaway was traded away
+    if (claimResult) {
+      expect(claimResult.status).not.toBe("won");
+    }
+  });
 });
