@@ -596,7 +596,7 @@ describe("Integration: Edge Cases", () => {
 
     // Now process waivers — the claim should fail because Player 2
     // no longer owns the drop castaway
-    const processResult = await processWaivers(leagueId);
+    await processWaivers(leagueId);
 
     // The waiver processing should either:
     // 1. Mark the claim as "lost" (because drop castaway is no longer owned)
