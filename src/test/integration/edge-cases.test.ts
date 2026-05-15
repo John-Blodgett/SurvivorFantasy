@@ -376,7 +376,26 @@ describe("Integration: Edge Cases", () => {
 
     if (!p7Assignments?.length || !p8Assignments?.length || !p9Assignments?.length) return;
 
-    const castawayToTrade = p7Assignments[0].castaway_id;
+    // Find a non-eliminated castaway owned by Player 7
+    let castawayToTrade: string | undefined;
+    for (const a of p7Assignments) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { castawayToTrade = a.castaway_id; break; }
+    }
+    if (!castawayToTrade) return;
+
+    // Find non-eliminated castaways for the receivers
+    let p8Castaway: string | undefined;
+    for (const a of p8Assignments) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { p8Castaway = a.castaway_id; break; }
+    }
+    let p9Castaway: string | undefined;
+    for (const a of p9Assignments) {
+      const { data: c } = await admin.from("castaways").select("is_eliminated").eq("id", a.castaway_id).single();
+      if (c && !c.is_eliminated) { p9Castaway = a.castaway_id; break; }
+    }
+    if (!p8Castaway || !p9Castaway) return;
 
     // Propose two trades for the same castaway
     const trade1 = await proposeTrade(
@@ -384,7 +403,7 @@ describe("Integration: Edge Cases", () => {
       playerIds[6],
       playerIds[7],
       castawayToTrade,
-      p8Assignments[0].castaway_id
+      p8Castaway
     );
     expect(trade1.error).toBeUndefined();
 
@@ -393,7 +412,7 @@ describe("Integration: Edge Cases", () => {
       playerIds[6],
       playerIds[8],
       castawayToTrade,
-      p9Assignments[0].castaway_id
+      p9Castaway
     );
     expect(trade2.error).toBeUndefined();
 
