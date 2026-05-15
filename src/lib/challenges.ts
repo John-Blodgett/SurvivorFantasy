@@ -79,6 +79,33 @@ export function validateChallengeSubmission(
 }
 
 /**
+ * Validates an edit/resubmit of a challenge response.
+ * Rules: response must be non-empty, deadline must not have passed,
+ * and the submission must not already be graded.
+ * Requirements: 9.3
+ */
+export function validateEditResponse(input: {
+  response: string;
+  deadline: string;
+  isGraded: boolean;
+}): ChallengeValidationResult {
+  if (!input.response || !input.response.trim()) {
+    return { valid: false, error: "Response cannot be empty." };
+  }
+
+  const deadlineDate = new Date(input.deadline);
+  if (new Date() > deadlineDate) {
+    return { valid: false, error: "The submission deadline for this challenge has passed." };
+  }
+
+  if (input.isGraded) {
+    return { valid: false, error: "Cannot edit a response that has already been graded." };
+  }
+
+  return { valid: true };
+}
+
+/**
  * Computes challenge points for a player.
  * Only correct submissions (is_correct === true) earn points.
  * Requirements: 9.4

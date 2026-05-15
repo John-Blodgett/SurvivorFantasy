@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { validateChallengeSubmission } from "@/lib/challenges";
+import { validateChallengeSubmission, validateEditResponse } from "@/lib/challenges";
 
 /** Submit a response to a weekly challenge. Requirements: 9.2, 9.3 */
 export async function submitChallengeResponseAction(formData: FormData) {
@@ -92,4 +92,82 @@ export async function submitChallengeResponseAction(formData: FormData) {
   }
 
   revalidatePath(`/league/${leagueId}/challenges`);
+}
+
+/** Edit/resubmit a challenge response before the deadline. */
+export async function editChallengeResponseAction(formData: FormData) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/");
+
+  const leagueId = formData.get("league_id") as string;
+  const submissionId = formData.get("submission_id") as string;
+  const response = formData.get("response") as string;
+
+  if (!submissionId || !leagueId) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(
+        "Missing required fields."
+      )}`
+    );
+  }
+
+  // Fetch the submission and its challenge (for deadline)
+  const { data: submission } = await supabase
+    .from("challenge_submissions")
+    .select("id, player_id, is_correct, challenge_id, challenges(deadline)")
+    .eq("id", submissionId)
+    .single();
+
+  if (!submission || submission.player_id !== user.id) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(
+        "Submission not found."
+      )}`
+    );
+  }
+
+  const challengeData = submission.challenges as unknown as { deadline: string } | null;
+  if (!challengeData) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(
+        "Challenge not found."
+      )}`
+    );
+  }
+
+  const validation = validateEditResponse({
+    response: response ?? "",
+    deadline: challengeData.deadline,
+    isGraded: submission.is_correct !== null,
+  });
+
+  if (!validation.valid) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(validation.error!)}`
+    );
+  }
+
+  const { error } = await supabase
+    .from("challenge_submissions")
+    .update({ response: response.trim() })
+    .eq("id", submissionId);
+
+  if (error) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(
+        "Failed to update response. Please try again."
+      )}`
+    );
+  }
+
+  revalidatePath(`/league/${leagueId}/challenges`);
+  redirect(
+    `/league/${leagueId}/challenges?success=${encodeURIComponent(
+      "Response updated successfully."
+    )}`
+  );
 }

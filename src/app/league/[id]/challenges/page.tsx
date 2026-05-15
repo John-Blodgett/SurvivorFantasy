@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
+import EditChallengeResponse from "@/components/edit-challenge-response";
 import { submitChallengeResponseAction } from "./actions";
 
 interface PageProps {
   params: { id: string };
-  searchParams: { error?: string };
+  searchParams: { error?: string; success?: string };
 }
 
 export default async function ChallengesPage({ params, searchParams }: PageProps) {
@@ -60,7 +61,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
   // Fetch user's submissions
   const { data: rawSubmissions } = await supabase
     .from("challenge_submissions")
-    .select("challenge_id, response, is_correct, submitted_at")
+    .select("id, challenge_id, response, is_correct, submitted_at")
     .eq("player_id", user.id)
     .in(
       "challenge_id",
@@ -87,6 +88,15 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
             className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2"
           >
             {searchParams.error}
+          </p>
+        )}
+
+        {searchParams.success && (
+          <p
+            role="status"
+            className="text-sm text-green-800 bg-green-100 rounded-md px-3 py-2"
+          >
+            {searchParams.success}
           </p>
         )}
 
@@ -155,6 +165,14 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                         <p className="text-xs text-muted-foreground mt-1">
                           Awaiting grading
                         </p>
+                      )}
+                      {/* Edit button: only if not graded and deadline hasn't passed */}
+                      {submission.is_correct === null && !isPastDeadline && (
+                        <EditChallengeResponse
+                          leagueId={leagueId}
+                          submissionId={submission.id}
+                          currentResponse={submission.response}
+                        />
                       )}
                     </div>
                   ) : !isPastDeadline ? (

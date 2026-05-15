@@ -3,6 +3,7 @@ import * as fc from "fast-check";
 import {
   validateChallengeSubmission,
   computeChallengePoints,
+  validateEditResponse,
 } from "@/lib/challenges";
 
 // ---------------------------------------------------------------------------
@@ -105,5 +106,58 @@ describe("Property 7: Challenge points are only awarded for correct submissions"
       ),
       { numRuns: 20 }
     );
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Unit tests: validateEditResponse
+// Feature: challenge edit/resubmit
+// Validates: non-empty response, deadline not passed, not yet graded
+// ---------------------------------------------------------------------------
+
+describe("validateEditResponse", () => {
+  it("valid edit: non-empty response, future deadline, not graded", () => {
+    const futureDeadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const result = validateEditResponse({
+      response: "My updated answer",
+      deadline: futureDeadline,
+      isGraded: false,
+    });
+    expect(result.valid).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
+
+  it("rejects empty response", () => {
+    const futureDeadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const result = validateEditResponse({
+      response: "   ",
+      deadline: futureDeadline,
+      isGraded: false,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe("Response cannot be empty.");
+  });
+
+  it("rejects when deadline has passed", () => {
+    const pastDeadline = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const result = validateEditResponse({
+      response: "My answer",
+      deadline: pastDeadline,
+      isGraded: false,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe("The submission deadline for this challenge has passed.");
+  });
+
+  it("rejects when submission is already graded", () => {
+    const futureDeadline = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const result = validateEditResponse({
+      response: "My answer",
+      deadline: futureDeadline,
+      isGraded: true,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe("Cannot edit a response that has already been graded.");
   });
 });
