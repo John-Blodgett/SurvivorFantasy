@@ -52,6 +52,7 @@ export default async function AdminHubPage({ params }: PageProps) {
 
   const tools = [
     { href: `/league/${leagueId}/admin/castaways`, label: "Castaways", description: "Add, eliminate, or restore castaways" },
+    { href: `/league/${leagueId}/admin/tribes`, label: "Tribes", description: "Create and manage tribes for castaways" },
     { href: `/league/${leagueId}/admin/rules`, label: "Scoring Rules", description: "Create and manage point values for events" },
     { href: `/league/${leagueId}/admin/draft`, label: "Draft Setup", description: "Configure draft mode and start the draft" },
     { href: `/league/${leagueId}/admin/episode/${scoreEpisodeNum}`, label: "Score Episode", description: `Score episode ${scoreEpisodeNum}` },
