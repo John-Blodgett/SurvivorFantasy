@@ -65,6 +65,8 @@ export async function approveTradeAction(formData: FormData) {
   ]);
 
   revalidatePath(basePath);
+  revalidatePath(`/league/${leagueId}/leaderboard`);
+  revalidatePath(`/league/${leagueId}/team`);
   redirect(`${basePath}?success=trade_approved`);
 }
 

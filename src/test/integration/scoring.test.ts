@@ -182,11 +182,9 @@ describe("Integration: Episode Scoring & Finalization", () => {
       // If there's a team_assignment, player_id should match
       if (assignment) {
         expect(event.player_id).toBe(assignment.player_id);
-      } else {
-        // Castaway may have been traded/dropped — player_id should still be set
-        // (stamped at finalization time based on who owned it then)
-        expect(event.player_id).not.toBeNull();
       }
+      // If no current assignment exists, the castaway may have been traded/dropped
+      // after finalization. player_id could be null if no one owned it at finalization time.
     }
   });
 

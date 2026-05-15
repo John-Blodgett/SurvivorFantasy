@@ -76,6 +76,8 @@ export async function acceptTradeInLeagueAction(formData: FormData) {
   ]);
 
   revalidatePath(`/league/${leagueId}/trades`);
+  revalidatePath(`/league/${leagueId}/leaderboard`);
+  revalidatePath(`/league/${leagueId}/team`);
   redirect(`/league/${leagueId}/trades?success=trade_accepted`);
 }
 
