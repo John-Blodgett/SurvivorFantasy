@@ -74,7 +74,7 @@ export default async function AdminLateJoinPage({ params, searchParams }: PagePr
   // Get available castaways (not on any team, not eliminated)
   const assignedCastawayIds = (assignments ?? []).map((a) => a.castaway_id);
 
-  let availableCastaways: { id: string; name: string; tribe: string | null }[] = [];
+  let availableCastaways: { id: string; name: string; tribe_id: string | null }[] = [];
 
   if (assignedCastawayIds.length > 0) {
     const { data } = await supabase
@@ -192,7 +192,6 @@ export default async function AdminLateJoinPage({ params, searchParams }: PagePr
                           {availableCastaways.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name}
-                              {c.tribe ? ` (${c.tribe})` : ""}
                             </option>
                           ))}
                         </select>

@@ -35,7 +35,7 @@ export const TEST_PLAYERS = Array.from({ length: 10 }, (_, i) => ({
 
 export const TEST_CASTAWAYS = Array.from({ length: 30 }, (_, i) => ({
   name: `Castaway-${String(i + 1).padStart(2, "0")}`,
-  tribe: i < 10 ? "Alpha" : i < 20 ? "Beta" : "Gamma",
+  tribe_name: i < 10 ? "Alpha" : i < 20 ? "Beta" : "Gamma",
 }));
 
 // ---------------------------------------------------------------------------

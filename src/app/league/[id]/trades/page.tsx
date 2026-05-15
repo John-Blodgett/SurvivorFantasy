@@ -69,7 +69,7 @@ export default async function LeagueTradesPage({ params, searchParams }: PagePro
 
   const myCastaways = (allCastaways ?? [])
     .filter((c) => assignmentMap.get(c.id) === user.id)
-    .map((c) => ({ id: c.id, name: c.name, tribe: c.tribe }));
+    .map((c) => ({ id: c.id, name: c.name }));
 
   const otherPlayers = (allMembers ?? [])
     .filter((m) => m.player_id !== user.id)
@@ -77,7 +77,7 @@ export default async function LeagueTradesPage({ params, searchParams }: PagePro
       const profileData = m.profiles as unknown as { display_name: string } | null;
       const playerCastaways = (allCastaways ?? [])
         .filter((c) => assignmentMap.get(c.id) === m.player_id)
-        .map((c) => ({ id: c.id, name: c.name, tribe: c.tribe }));
+        .map((c) => ({ id: c.id, name: c.name }));
       return {
         id: m.player_id,
         display_name: profileData?.display_name ?? "Unknown",

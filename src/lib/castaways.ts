@@ -7,7 +7,7 @@ export interface Castaway {
   id: string;
   league_id: string;
   name: string;
-  tribe: string | null;
+  tribe_id: string | null;
   photo_url: string | null;
   is_eliminated: boolean;
   eliminated_episode: number | null;
@@ -16,7 +16,7 @@ export interface Castaway {
 
 export interface CreateCastawayInput {
   name: string;
-  tribe: string;
+  tribe_id: string | null;
   photo_url: string | null;
 }
 

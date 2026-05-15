@@ -286,11 +286,6 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
                     )}
                     <div>
                       <p className="text-sm font-semibold">{castaway.name}</p>
-                      {castaway.tribe && (
-                        <p className="text-xs text-muted-foreground">
-                          {castaway.tribe}
-                        </p>
-                      )}
                     </div>
                   </div>
 

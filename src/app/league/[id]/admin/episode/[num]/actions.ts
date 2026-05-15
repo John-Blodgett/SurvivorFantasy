@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { buildConsolationEvents } from "@/lib/episodes";
 import { validateCreateChallenge } from "@/lib/challenges";
+import { buildTribeEvents } from "@/lib/tribes";
 import { requireLeagueAdmin } from "../../helpers";
 
 async function ensureEpisode(
@@ -287,5 +288,56 @@ export async function gradeChallengeSubmissionAction(formData: FormData) {
     .from("challenge_submissions").update({ is_correct: isCorrect }).eq("id", submissionId);
 
   if (error) redirect(`${basePath}?error=${encodeURIComponent("Failed to grade submission.")}`);
+  revalidatePath(basePath);
+}
+
+export async function addTribeEventAction(formData: FormData) {
+  const leagueId = formData.get("league_id") as string;
+  const { supabase } = await requireLeagueAdmin(leagueId);
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const basePath = `/league/${leagueId}/admin/episode/${episodeNumber}`;
+
+  const tribeId = formData.get("tribe_id") as string;
+  const ruleId = formData.get("rule_id") as string;
+  const points = parseInt(formData.get("points") as string, 10);
+
+  if (!tribeId || !ruleId || isNaN(points) || isNaN(episodeNumber)) {
+    redirect(`${basePath}?error=${encodeURIComponent("Invalid tribe event data.")}`);
+  }
+
+  const episodeId = await ensureEpisode(supabase, leagueId, episodeNumber);
+
+  const { data: episode } = await supabase
+    .from("episodes").select("is_finalized").eq("id", episodeId).single();
+
+  if (episode?.is_finalized) {
+    redirect(`${basePath}?error=${encodeURIComponent("Cannot add events to a finalized episode.")}`);
+  }
+
+  // Fetch all non-eliminated castaways in the tribe
+  const { data: castaways } = await supabase
+    .from("castaways")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("tribe_id", tribeId)
+    .eq("is_eliminated", false);
+
+  if (!castaways || castaways.length === 0) {
+    redirect(`${basePath}?error=${encodeURIComponent("No active castaways in this tribe.")}`);
+  }
+
+  const events = buildTribeEvents(
+    episodeId,
+    castaways.map((c) => c.id),
+    ruleId,
+    points
+  );
+
+  const { error } = await supabase.from("episode_events").insert(events);
+
+  if (error) {
+    redirect(`${basePath}?error=${encodeURIComponent("Failed to record tribe events.")}`);
+  }
+
   revalidatePath(basePath);
 }

@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react";
 interface Castaway {
   id: string;
   name: string;
-  tribe: string | null;
+  tribe_id: string | null;
   photo_url: string | null;
 }
 
@@ -124,9 +124,6 @@ export default function DraftPreferencesForm({ leagueId, castaways }: Props) {
             {/* Name + tribe */}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{castaway.name}</p>
-              {castaway.tribe && (
-                <p className="text-xs text-muted-foreground">{castaway.tribe}</p>
-              )}
             </div>
 
             {/* Up/down buttons for accessibility */}

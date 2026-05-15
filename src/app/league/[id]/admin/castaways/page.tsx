@@ -27,6 +27,12 @@ export default async function AdminCastawaysPage({ params, searchParams }: PageP
 
   if (!league || league.admin_id !== user.id) redirect("/dashboard");
 
+  const { data: tribes } = await supabase
+    .from("tribes")
+    .select("id, name, color")
+    .eq("league_id", leagueId)
+    .order("name", { ascending: true });
+
   const { data: castaways } = await supabase
     .from("castaways")
     .select("*")
@@ -63,7 +69,7 @@ export default async function AdminCastawaysPage({ params, searchParams }: PageP
         <section aria-labelledby="add-heading">
           <h2 id="add-heading" className="text-base font-semibold mb-3">Add Castaway</h2>
           <div className="rounded-lg border border-border bg-card p-5">
-            <AddCastawayForm leagueId={leagueId} />
+            <AddCastawayForm leagueId={leagueId} tribes={tribes ?? []} />
           </div>
         </section>
 
@@ -108,7 +114,7 @@ function CastawayRow({ castaway, action, leagueId }: { castaway: Castaway; actio
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{castaway.name}</p>
-        {castaway.tribe && <p className="text-xs text-muted-foreground">{castaway.tribe}</p>}
+        {castaway.tribe_id && <p className="text-xs text-muted-foreground">Tribe assigned</p>}
         {castaway.is_eliminated && castaway.eliminated_episode && (
           <p className="text-xs text-destructive">Eliminated ep. {castaway.eliminated_episode}</p>
         )}

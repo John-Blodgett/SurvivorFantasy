@@ -11,10 +11,10 @@ export async function addCastawayAction(formData: FormData) {
   const basePath = `/league/${leagueId}/admin/castaways`;
 
   const name = (formData.get("name") as string | null) ?? "";
-  const tribe = (formData.get("tribe") as string | null) ?? "";
+  const tribe_id = (formData.get("tribe_id") as string | null) || null;
   const photo_url = (formData.get("photo_url") as string | null) || null;
 
-  const validation = validateCreateCastaway({ name, tribe, photo_url });
+  const validation = validateCreateCastaway({ name, tribe_id, photo_url });
   if (!validation.valid) {
     redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
   }
@@ -22,7 +22,7 @@ export async function addCastawayAction(formData: FormData) {
   const { error } = await supabase.from("castaways").insert({
     league_id: leagueId,
     name: name.trim(),
-    tribe: tribe.trim() || null,
+    tribe_id,
     photo_url,
   });
 

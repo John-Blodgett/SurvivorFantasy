@@ -12,7 +12,7 @@ interface Player {
 interface Castaway {
   id: string;
   name: string;
-  tribe: string | null;
+  tribe_id: string | null;
   photo_url: string | null;
   is_eliminated: boolean;
 }
@@ -400,11 +400,6 @@ export default function DraftRoom({
                         <p className="text-xs font-medium truncate">
                           {castaway.name}
                         </p>
-                        {castaway.tribe && (
-                          <p className="text-xs text-muted-foreground truncate">
-                            {castaway.tribe}
-                          </p>
-                        )}
                       </div>
                     </div>
                   </button>

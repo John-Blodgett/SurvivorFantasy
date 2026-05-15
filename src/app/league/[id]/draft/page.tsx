@@ -276,7 +276,7 @@ function DraftResultsView({
   castaways: {
     id: string;
     name: string;
-    tribe: string | null;
+    tribe_id: string | null;
     photo_url: string | null;
     is_eliminated: boolean;
   }[];
@@ -355,11 +355,6 @@ function DraftResultsView({
                             <span className="font-medium truncate block">
                               {c?.name ?? "Unknown"}
                             </span>
-                            {c?.tribe && (
-                              <span className="text-muted-foreground truncate block">
-                                {c.tribe}
-                              </span>
-                            )}
                           </div>
                         </li>
                       );

@@ -98,6 +98,9 @@ export async function cleanup(): Promise<void> {
   // 12. castaways
   await admin.from("castaways").delete().in("league_id", leagueIds);
 
+  // 12b. tribes
+  await admin.from("tribes").delete().in("league_id", leagueIds);
+
   // 13. league_members
   await admin.from("league_members").delete().in("league_id", leagueIds);
 
@@ -195,11 +198,26 @@ export async function seed(): Promise<{
     }
   }
 
+  // --- Create tribes for the league ---
+  const tribeNames = ["Alpha", "Beta", "Gamma"];
+  const { data: tribes, error: tribeError } = await admin
+    .from("tribes")
+    .insert(tribeNames.map((name) => ({ league_id: leagueId, name })))
+    .select("id, name");
+
+  if (tribeError || !tribes) {
+    throw new Error(
+      `Failed to insert tribes: ${tribeError?.message ?? "no data returned"}`
+    );
+  }
+
+  const tribeMap = new Map(tribes.map((t: { id: string; name: string }) => [t.name, t.id]));
+
   // --- Insert 30 castaways ---
   const castawayRows = TEST_CASTAWAYS.map((c) => ({
     league_id: leagueId,
     name: c.name,
-    tribe: c.tribe,
+    tribe_id: tribeMap.get(c.tribe_name) ?? null,
   }));
 
   const { data: castaways, error: castawayError } = await admin

@@ -73,16 +73,15 @@ describe("Integration: Admin Tools", () => {
       .insert({
         league_id: leagueId,
         name: "Castaway-31",
-        tribe: "Delta",
+        tribe_id: null,
       })
-      .select("id, league_id, name, tribe")
+      .select("id, league_id, name, tribe_id")
       .single();
 
     expect(error).toBeNull();
     expect(data).not.toBeNull();
     expect(data!.league_id).toBe(leagueId);
     expect(data!.name).toBe("Castaway-31");
-    expect(data!.tribe).toBe("Delta");
   });
 
   // ---------------------------------------------------------------------------
@@ -142,7 +141,7 @@ describe("Integration: Admin Tools", () => {
       .insert({
         league_id: leagueId,
         name: "",
-        tribe: "Delta",
+        tribe_id: null,
       })
       .select()
       .single();

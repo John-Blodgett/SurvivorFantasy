@@ -5,11 +5,18 @@ import { addCastawayAction } from "@/app/league/[id]/admin/castaways/actions";
 import PhotoUpload from "./photo-upload";
 import SubmitButton from "./submit-button";
 
-interface AddCastawayFormProps {
-  leagueId: string;
+interface TribeOption {
+  id: string;
+  name: string;
+  color: string | null;
 }
 
-export default function AddCastawayForm({ leagueId }: AddCastawayFormProps) {
+interface AddCastawayFormProps {
+  leagueId: string;
+  tribes?: TribeOption[];
+}
+
+export default function AddCastawayForm({ leagueId, tribes = [] }: AddCastawayFormProps) {
   const [photoUrl, setPhotoUrl] = useState<string>("");
 
   return (
@@ -37,16 +44,21 @@ export default function AddCastawayForm({ leagueId }: AddCastawayFormProps) {
           </div>
 
           <div className="space-y-1">
-            <label htmlFor="tribe" className="text-sm font-medium">
+            <label htmlFor="tribe_id" className="text-sm font-medium">
               Tribe
             </label>
-            <input
-              id="tribe"
-              name="tribe"
-              type="text"
-              placeholder="e.g. Tika"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+            <select
+              id="tribe_id"
+              name="tribe_id"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">No tribe</option>
+              {tribes.map((tribe) => (
+                <option key={tribe.id} value={tribe.id}>
+                  {tribe.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

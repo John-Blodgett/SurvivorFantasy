@@ -7,7 +7,6 @@ import SubmitButton from "./submit-button";
 interface Castaway {
   id: string;
   name: string;
-  tribe: string | null;
 }
 
 interface Player {
@@ -99,7 +98,7 @@ export default function TradeProposalWithPlayer({
             <option value="">Select your castaway...</option>
             {myCastaways.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} {c.tribe ? `(${c.tribe})` : ""}
+                {c.name}
               </option>
             ))}
           </select>
@@ -125,7 +124,7 @@ export default function TradeProposalWithPlayer({
             </option>
             {theirCastaways.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} {c.tribe ? `(${c.tribe})` : ""}
+                {c.name}
               </option>
             ))}
           </select>

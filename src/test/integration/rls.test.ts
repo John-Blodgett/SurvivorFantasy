@@ -101,7 +101,7 @@ describe("Integration: RLS Policy Enforcement", () => {
       .insert({
         league_id: leagueId,
         name: "Unauthorized Castaway",
-        tribe: "Rogue",
+        tribe_id: null,
       })
       .select()
       .single();

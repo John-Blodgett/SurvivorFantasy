@@ -90,9 +90,6 @@ export default function EpisodeScorerForm({
                 <span className="text-xs text-center leading-tight font-medium">
                   {c.name}
                 </span>
-                {c.tribe && (
-                  <span className="text-xs text-muted-foreground">{c.tribe}</span>
-                )}
               </button>
             ))}
           </div>

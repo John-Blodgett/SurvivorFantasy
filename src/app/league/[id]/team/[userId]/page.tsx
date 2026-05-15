@@ -176,7 +176,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
   const displayName = targetProfile?.display_name ?? "Unknown Player";
 
   // Fetch the current user's team assignments for trade proposal (only if viewing another player)
-  let myActiveCastaways: { id: string; name: string; tribe: string | null; is_eliminated: boolean }[] = [];
+  let myActiveCastaways: { id: string; name: string; is_eliminated: boolean }[] = [];
   if (!isOwnTeam) {
     const { data: myAssignments } = await supabase
       .from("team_assignments")
@@ -187,14 +187,14 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
     const myCastawayIds = (myAssignments ?? []).map((a) => a.castaway_id);
     myActiveCastaways = allCastaways
       .filter((c) => myCastawayIds.includes(c.id) && !c.is_eliminated)
-      .map((c) => ({ id: c.id, name: c.name, tribe: c.tribe, is_eliminated: c.is_eliminated }));
+      .map((c) => ({ id: c.id, name: c.name, is_eliminated: c.is_eliminated }));
   }
 
   // Active castaways on the target player's team (for trade form)
   const theirActiveCastaways = activeCastaways
     .map((id) => castawayMap.get(id))
     .filter((c): c is NonNullable<typeof c> => c != null && !c.is_eliminated)
-    .map((c) => ({ id: c.id, name: c.name, tribe: c.tribe, is_eliminated: c.is_eliminated }));
+    .map((c) => ({ id: c.id, name: c.name, is_eliminated: c.is_eliminated }));
 
   return (
     <AppShell
@@ -345,7 +345,7 @@ interface CastawayBreakdownCardProps {
   castaway: {
     id: string;
     name: string;
-    tribe: string | null;
+    tribe_id: string | null;
     photo_url: string | null;
     is_eliminated: boolean;
     eliminated_episode: number | null;
@@ -428,11 +428,6 @@ function CastawayBreakdownCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-sm">{castaway.name}</span>
-            {castaway.tribe && (
-              <span className="text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-                {castaway.tribe}
-              </span>
-            )}
             {isEliminated && (
               <span className="text-xs text-destructive bg-destructive/10 rounded px-1.5 py-0.5 font-medium">
                 Eliminated Ep. {castaway.eliminated_episode}

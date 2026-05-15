@@ -7,7 +7,6 @@ import SubmitButton from "./submit-button";
 interface Castaway {
   id: string;
   name: string;
-  tribe: string | null;
   is_eliminated: boolean;
 }
 
@@ -66,7 +65,7 @@ export default function TradeProposalForm({
             <option value="">Select your castaway...</option>
             {myActiveCastaways.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} {c.tribe ? `(${c.tribe})` : ""}
+                {c.name}
               </option>
             ))}
           </select>
@@ -85,7 +84,7 @@ export default function TradeProposalForm({
             <option value="">Select their castaway...</option>
             {theirActiveCastaways.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name} {c.tribe ? `(${c.tribe})` : ""}
+                {c.name}
               </option>
             ))}
           </select>
