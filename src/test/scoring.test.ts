@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
 import {
   computePlayerScore,
+  buildBatchEvents,
   type TeamAssignment,
   type EpisodeEvent,
   type EliminatedCastaway,
@@ -271,6 +272,116 @@ describe("Challenge points: only correct submissions are counted", () => {
         }
       ),
       { numRuns: 20 }
+    );
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// buildBatchEvents
+// ---------------------------------------------------------------------------
+
+describe("buildBatchEvents", () => {
+  it("returns empty array when castawayIds is empty", () => {
+    const rulePointsMap = new Map([["rule-1", 5]]);
+    const result = buildBatchEvents("ep-1", [], ["rule-1"], rulePointsMap);
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when ruleIds is empty", () => {
+    const rulePointsMap = new Map<string, number>();
+    const result = buildBatchEvents("ep-1", ["c-1", "c-2"], [], rulePointsMap);
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when both arrays are empty", () => {
+    const rulePointsMap = new Map<string, number>();
+    const result = buildBatchEvents("ep-1", [], [], rulePointsMap);
+    expect(result).toEqual([]);
+  });
+
+  it("creates one event for a single castaway and single rule", () => {
+    const rulePointsMap = new Map([["rule-1", 3]]);
+    const result = buildBatchEvents("ep-1", ["c-1"], ["rule-1"], rulePointsMap);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      episode_id: "ep-1",
+      castaway_id: "c-1",
+      scoring_rule_id: "rule-1",
+      points: 3,
+    });
+  });
+
+  it("creates N×M events for multiple castaways and rules", () => {
+    const rulePointsMap = new Map([
+      ["rule-1", 5],
+      ["rule-2", -2],
+      ["rule-3", 10],
+    ]);
+    const castawayIds = ["c-1", "c-2"];
+    const ruleIds = ["rule-1", "rule-2", "rule-3"];
+
+    const result = buildBatchEvents("ep-1", castawayIds, ruleIds, rulePointsMap);
+
+    expect(result).toHaveLength(6); // 2 × 3
+
+    // Verify all combinations exist
+    for (const castawayId of castawayIds) {
+      for (const ruleId of ruleIds) {
+        const event = result.find(
+          (e) => e.castaway_id === castawayId && e.scoring_rule_id === ruleId
+        );
+        expect(event).toBeDefined();
+        expect(event!.episode_id).toBe("ep-1");
+        expect(event!.points).toBe(rulePointsMap.get(ruleId));
+      }
+    }
+  });
+
+  it("uses 0 points when a rule is not in the points map", () => {
+    const rulePointsMap = new Map([["rule-1", 5]]);
+    const result = buildBatchEvents("ep-1", ["c-1"], ["rule-missing"], rulePointsMap);
+    expect(result).toHaveLength(1);
+    expect(result[0].points).toBe(0);
+  });
+
+  it("output length equals castawayIds.length × ruleIds.length (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        fc.uniqueArray(fc.uuid(), { minLength: 0, maxLength: 10 }),
+        fc.uniqueArray(fc.uuid(), { minLength: 0, maxLength: 10 }),
+        (episodeId, castawayIds, ruleIds) => {
+          const rulePointsMap = new Map(ruleIds.map((id, i) => [id, (i + 1) * 2]));
+          const result = buildBatchEvents(episodeId, castawayIds, ruleIds, rulePointsMap);
+          expect(result).toHaveLength(castawayIds.length * ruleIds.length);
+          return true;
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+
+  it("every event has the correct episode_id and valid fields (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.uuid(),
+        fc.uniqueArray(fc.uuid(), { minLength: 1, maxLength: 5 }),
+        fc.uniqueArray(fc.uuid(), { minLength: 1, maxLength: 5 }),
+        (episodeId, castawayIds, ruleIds) => {
+          const rulePointsMap = new Map(ruleIds.map((id, i) => [id, i * 3 - 5]));
+          const result = buildBatchEvents(episodeId, castawayIds, ruleIds, rulePointsMap);
+
+          for (const event of result) {
+            expect(event.episode_id).toBe(episodeId);
+            expect(castawayIds).toContain(event.castaway_id);
+            expect(ruleIds).toContain(event.scoring_rule_id);
+            expect(event.points).toBe(rulePointsMap.get(event.scoring_rule_id));
+          }
+          return true;
+        }
+      ),
+      { numRuns: 30 }
     );
   });
 });

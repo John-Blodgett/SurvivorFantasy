@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { buildConsolationEvents } from "@/lib/episodes";
 import { validateCreateChallenge } from "@/lib/challenges";
 import { buildTribeEvents } from "@/lib/tribes";
+import { buildBatchEvents } from "@/lib/scoring";
 import { requireLeagueAdmin } from "../../helpers";
 
 async function ensureEpisode(
@@ -337,6 +338,61 @@ export async function addTribeEventAction(formData: FormData) {
 
   if (error) {
     redirect(`${basePath}?error=${encodeURIComponent("Failed to record tribe events.")}`);
+  }
+
+  revalidatePath(basePath);
+}
+
+export async function addBatchEventsAction(formData: FormData) {
+  const leagueId = formData.get("league_id") as string;
+  const { supabase } = await requireLeagueAdmin(leagueId);
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const basePath = `/league/${leagueId}/admin/episode/${episodeNumber}`;
+
+  const castawayIdsRaw = formData.get("castaway_ids") as string;
+  const ruleIdsRaw = formData.get("rule_ids") as string;
+
+  let castawayIds: string[];
+  let ruleIds: string[];
+  try {
+    castawayIds = JSON.parse(castawayIdsRaw);
+    ruleIds = JSON.parse(ruleIdsRaw);
+  } catch {
+    redirect(`${basePath}?error=${encodeURIComponent("Invalid batch data.")}`);
+  }
+
+  if (!Array.isArray(castawayIds) || !Array.isArray(ruleIds) || castawayIds.length === 0 || ruleIds.length === 0) {
+    redirect(`${basePath}?error=${encodeURIComponent("Select at least one castaway and one rule.")}`);
+  }
+
+  const episodeId = await ensureEpisode(supabase, leagueId, episodeNumber);
+
+  const { data: episode } = await supabase
+    .from("episodes").select("is_finalized").eq("id", episodeId).single();
+
+  if (episode?.is_finalized) {
+    redirect(`${basePath}?error=${encodeURIComponent("Cannot add events to a finalized episode.")}`);
+  }
+
+  // Fetch points for each selected rule
+  const { data: rules } = await supabase
+    .from("scoring_rules")
+    .select("id, points")
+    .eq("league_id", leagueId)
+    .in("id", ruleIds);
+
+  if (!rules || rules.length === 0) {
+    redirect(`${basePath}?error=${encodeURIComponent("No valid scoring rules found.")}`);
+  }
+
+  const rulePointsMap = new Map<string, number>(rules.map((r) => [r.id, r.points]));
+
+  const events = buildBatchEvents(episodeId, castawayIds, ruleIds, rulePointsMap);
+
+  const { error } = await supabase.from("episode_events").insert(events);
+
+  if (error) {
+    redirect(`${basePath}?error=${encodeURIComponent("Failed to record batch events.")}`);
   }
 
   revalidatePath(basePath);

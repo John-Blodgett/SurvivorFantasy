@@ -8,6 +8,34 @@
  */
 
 // ---------------------------------------------------------------------------
+// Batch event builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds N×M episode event records from arrays of castaways and rules.
+ * Each castaway gets one event per rule, using the points from rulePointsMap.
+ */
+export function buildBatchEvents(
+  episodeId: string,
+  castawayIds: string[],
+  ruleIds: string[],
+  rulePointsMap: Map<string, number>
+): Array<{ episode_id: string; castaway_id: string; scoring_rule_id: string; points: number }> {
+  const events: Array<{ episode_id: string; castaway_id: string; scoring_rule_id: string; points: number }> = [];
+  for (const castawayId of castawayIds) {
+    for (const ruleId of ruleIds) {
+      events.push({
+        episode_id: episodeId,
+        castaway_id: castawayId,
+        scoring_rule_id: ruleId,
+        points: rulePointsMap.get(ruleId) ?? 0,
+      });
+    }
+  }
+  return events;
+}
+
+// ---------------------------------------------------------------------------
 // Data types
 // ---------------------------------------------------------------------------
 

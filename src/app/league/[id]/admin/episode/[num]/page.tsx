@@ -14,6 +14,7 @@ import {
   gradeChallengeSubmissionAction,
 } from "./actions";
 import EpisodeScorerForm from "@/components/episode-scorer-form";
+import BatchScoringForm from "@/components/batch-scoring-form";
 import type { Castaway } from "@/lib/castaways";
 import type { ScoringRule } from "@/lib/scoring-rules";
 import type { EpisodeEvent } from "@/lib/episodes";
@@ -46,7 +47,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
     .from("episodes").select("*").eq("league_id", leagueId).eq("number", episodeNumber).single();
 
   const { data: activeCastaways } = await supabase
-    .from("castaways").select("*").eq("league_id", leagueId).eq("is_eliminated", false).order("name");
+    .from("castaways").select("*, tribes(name)").eq("league_id", leagueId).eq("is_eliminated", false).order("name");
 
   const { data: rules } = await supabase
     .from("scoring_rules").select("*").eq("league_id", leagueId).order("name");
@@ -167,6 +168,24 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
           <section aria-labelledby="score-heading">
             <h2 id="score-heading" className="text-base font-semibold mb-3">Record Event</h2>
             <EpisodeScorerForm leagueId={leagueId} episodeNumber={episodeNumber} castaways={allCastaways} rules={allRules} />
+          </section>
+        )}
+
+        {!isFinalized && (
+          <section aria-labelledby="batch-score-heading">
+            <h2 id="batch-score-heading" className="text-base font-semibold mb-3">Batch Scoring</h2>
+            <BatchScoringForm
+              leagueId={leagueId}
+              episodeNumber={episodeNumber}
+              castaways={allCastaways.map((c) => ({
+                id: c.id,
+                name: c.name,
+                tribe_name: (c as Record<string, unknown>).tribes
+                  ? ((c as Record<string, unknown>).tribes as Record<string, unknown> | null)?.name as string | null ?? null
+                  : null,
+              }))}
+              scoringRules={allRules.map((r) => ({ id: r.id, name: r.name, points: r.points }))}
+            />
           </section>
         )}
 
