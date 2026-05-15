@@ -79,7 +79,7 @@ export default async function AdminLateJoinPage({ params, searchParams }: PagePr
   if (assignedCastawayIds.length > 0) {
     const { data } = await supabase
       .from("castaways")
-      .select("id, name, tribe")
+      .select("id, name, tribe_id")
       .eq("league_id", league.id)
       .eq("is_eliminated", false)
       .not("id", "in", `(${assignedCastawayIds.join(",")})`);
@@ -87,7 +87,7 @@ export default async function AdminLateJoinPage({ params, searchParams }: PagePr
   } else {
     const { data } = await supabase
       .from("castaways")
-      .select("id, name, tribe")
+      .select("id, name, tribe_id")
       .eq("league_id", league.id)
       .eq("is_eliminated", false);
     availableCastaways = data ?? [];

@@ -94,7 +94,7 @@ export default async function DraftPage({
 
   const { data: castaways } = await supabase
     .from("castaways")
-    .select("id, name, tribe, photo_url, is_eliminated")
+    .select("id, name, tribe_id, photo_url, is_eliminated")
     .eq("league_id", leagueId)
     .order("name", { ascending: true });
 
@@ -173,7 +173,7 @@ async function PreDraftView({
 
   const { data: castaways } = await supabase
     .from("castaways")
-    .select("id, name, tribe, photo_url")
+    .select("id, name, tribe_id, photo_url")
     .eq("league_id", leagueId)
     .eq("is_eliminated", false)
     .order("name", { ascending: true });

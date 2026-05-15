@@ -53,7 +53,7 @@ export default async function LeagueTradesPage({ params, searchParams }: PagePro
   // Fetch all active castaways with their team assignments
   const { data: allCastaways } = await supabase
     .from("castaways")
-    .select("id, name, tribe, is_eliminated")
+    .select("id, name, tribe_id, is_eliminated")
     .eq("league_id", leagueId)
     .eq("is_eliminated", false);
 

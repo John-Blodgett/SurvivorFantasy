@@ -70,7 +70,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
   }
 
   const isFinalized = episode?.is_finalized ?? false;
-  const allCastaways: Castaway[] = activeCastaways ?? [];
+  const allCastaways = (activeCastaways ?? []) as Array<Record<string, unknown>>;
   const allRules: ScoringRule[] = rules ?? [];
 
   let challenges: Challenge[] = [];
@@ -167,7 +167,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
         {!isFinalized && (
           <section aria-labelledby="score-heading">
             <h2 id="score-heading" className="text-base font-semibold mb-3">Record Event</h2>
-            <EpisodeScorerForm leagueId={leagueId} episodeNumber={episodeNumber} castaways={allCastaways} rules={allRules} />
+            <EpisodeScorerForm leagueId={leagueId} episodeNumber={episodeNumber} castaways={allCastaways as unknown as Castaway[]} rules={allRules} />
           </section>
         )}
 
@@ -178,10 +178,10 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
               leagueId={leagueId}
               episodeNumber={episodeNumber}
               castaways={allCastaways.map((c) => ({
-                id: c.id,
-                name: c.name,
-                tribe_name: (c as Record<string, unknown>).tribes
-                  ? ((c as Record<string, unknown>).tribes as Record<string, unknown> | null)?.name as string | null ?? null
+                id: c.id as string,
+                name: c.name as string,
+                tribe_name: c.tribes
+                  ? (c.tribes as Record<string, unknown>)?.name as string | null ?? null
                   : null,
               }))}
               scoringRules={allRules.map((r) => ({ id: r.id, name: r.name, points: r.points }))}

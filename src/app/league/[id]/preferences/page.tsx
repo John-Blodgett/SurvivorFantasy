@@ -56,7 +56,7 @@ export default async function DraftPreferencesPage({
   // Get all active castaways
   const { data: castaways } = await supabase
     .from("castaways")
-    .select("id, name, tribe, photo_url")
+    .select("id, name, tribe_id, photo_url")
     .eq("league_id", leagueId)
     .eq("is_eliminated", false)
     .order("name", { ascending: true });

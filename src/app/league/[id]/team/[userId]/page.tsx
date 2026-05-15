@@ -78,7 +78,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
   // Fetch all castaways for this league (to get names, tribes, photos, elimination status)
   const { data: allCastawaysRaw } = await supabase
     .from("castaways")
-    .select("id, name, tribe, photo_url, is_eliminated, eliminated_episode")
+    .select("id, name, tribe_id, photo_url, is_eliminated, eliminated_episode")
     .eq("league_id", leagueId);
 
   const allCastaways = allCastawaysRaw ?? [];
