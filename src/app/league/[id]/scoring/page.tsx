@@ -103,6 +103,19 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
 
   const { data: eventsRaw } = await query.order("created_at", { ascending: true });
 
+  // Fetch graded challenge submissions for the scoring log
+  let challengeQuery = supabase
+    .from("challenge_submissions")
+    .select("id, player_id, is_correct, submitted_at, challenges!inner(league_id, title, points)")
+    .eq("challenges.league_id", leagueId)
+    .eq("is_correct", true);
+
+  if (playerFilter) {
+    challengeQuery = challengeQuery.eq("player_id", playerFilter);
+  }
+
+  const { data: challengeSubsRaw } = await challengeQuery.order("submitted_at", { ascending: true });
+
   // Fetch all profiles for player name lookup
   const profileMap = new Map(
     players.map((p) => [p.id, p.name])
@@ -138,6 +151,32 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       running_total: playerId ? playerTotals.get(playerId)! : null,
     };
   });
+
+  // Add challenge points to the log (no castaway associated)
+  if (!castawayFilter) {
+    for (const sub of challengeSubsRaw ?? []) {
+      const s = sub as Record<string, unknown>;
+      const challenge = s.challenges as Record<string, unknown>;
+      const playerId = s.player_id as string;
+      const points = challenge.points as number;
+
+      const current = playerTotals.get(playerId) ?? 0;
+      playerTotals.set(playerId, current + points);
+
+      events.push({
+        id: `challenge-${s.id}`,
+        episode_number: 0,
+        castaway_id: "",
+        castaway_name: "",
+        castaway_photo: null,
+        rule_name: `Challenge: ${challenge.title as string}`,
+        points,
+        player_name: profileMap.get(playerId) ?? "Unknown",
+        player_id: playerId,
+        running_total: playerTotals.get(playerId)!,
+      });
+    }
+  }
 
   // Build filter URL helper
   function filterUrl(overrides: { episode?: string | null; player?: string | null; castaway?: string | null }) {
@@ -325,27 +364,31 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                       className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
                     >
                       <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
-                        {event.episode_number}
+                        {event.episode_number > 0 ? event.episode_number : "—"}
                       </td>
                       <td className="px-3 py-2.5">
-                        <Link
-                          href={filterUrl({ castaway: event.castaway_id })}
-                          className="flex items-center gap-2 hover:underline"
-                        >
-                          {event.castaway_photo ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={event.castaway_photo}
-                              alt={event.castaway_name}
-                              className="w-6 h-6 rounded-full object-cover shrink-0"
-                            />
-                          ) : (
-                            <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
-                              {event.castaway_name.charAt(0)}
-                            </span>
-                          )}
-                          <span className="font-medium">{event.castaway_name}</span>
-                        </Link>
+                        {event.castaway_id ? (
+                          <Link
+                            href={filterUrl({ castaway: event.castaway_id })}
+                            className="flex items-center gap-2 hover:underline"
+                          >
+                            {event.castaway_photo ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={event.castaway_photo}
+                                alt={event.castaway_name}
+                                className="w-6 h-6 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                                {event.castaway_name.charAt(0)}
+                              </span>
+                            )}
+                            <span className="font-medium">{event.castaway_name}</span>
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground italic">🏆 Challenge</span>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground">
                         {event.rule_name ?? "—"}

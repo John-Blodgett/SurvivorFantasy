@@ -129,7 +129,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
   // Fetch challenge submissions for the target player
   const { data: challengeSubsRaw } = await supabase
     .from("challenge_submissions")
-    .select("player_id, is_correct, challenges!inner(league_id, points)")
+    .select("player_id, is_correct, challenges!inner(league_id, points, title)")
     .eq("challenges.league_id", leagueId)
     .eq("player_id", targetUserId);
 
@@ -321,13 +321,28 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
 
             {/* Challenge points summary */}
             {scoreBreakdown.challenge_points > 0 && (
-              <section className="rounded-lg border border-border bg-card p-4">
+              <section className="rounded-lg border border-border bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Challenge Points</span>
-                  <span className="tabular-nums font-semibold text-sm">
+                  <span className="text-sm font-semibold">🏆 Challenge Points</span>
+                  <span className="tabular-nums font-bold text-sm text-green-700">
                     +{scoreBreakdown.challenge_points}
                   </span>
                 </div>
+                {challengeSubsRaw && challengeSubsRaw.length > 0 && (
+                  <div className="space-y-1">
+                    {(challengeSubsRaw as Array<Record<string, unknown>>)
+                      .filter((s) => s.is_correct === true)
+                      .map((s, i) => {
+                        const ch = s.challenges as Record<string, unknown>;
+                        return (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">{ch.title as string ?? `Challenge ${i + 1}`}</span>
+                            <span className="tabular-nums font-medium text-green-700">+{ch.points as number}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </section>
             )}
           </>
