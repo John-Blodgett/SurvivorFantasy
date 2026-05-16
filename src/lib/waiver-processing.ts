@@ -9,8 +9,8 @@ import { processWaiverClaims, type WaiverClaim } from "./waiver";
 const PACIFIC_TZ = "America/Los_Angeles";
 
 /**
- * Determines if a league's waiver schedule matches the current Pacific time.
- * Used by the cron job to decide which leagues to process.
+ * Determines if a league's waiver schedule includes today (Pacific time).
+ * Since Vercel Hobby only supports daily crons, we check the day only.
  */
 export function shouldProcessLeague(
   processDays: string | null,
@@ -18,21 +18,13 @@ export function shouldProcessLeague(
   processMinute: number | null,
   now: Date = new Date()
 ): boolean {
-  if (!processDays || processHour === null || processMinute === null) {
+  if (!processDays) {
     return false;
   }
 
   const days = processDays.split(",").map((d) => parseInt(d, 10));
 
-  // Get current day/hour/minute in Pacific time
-  const pacificParts = new Intl.DateTimeFormat("en-US", {
-    timeZone: PACIFIC_TZ,
-    weekday: "short",
-    hour: "numeric",
-    minute: "numeric",
-    hour12: false,
-  }).formatToParts(now);
-
+  // Get current day in Pacific time
   const dayFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: PACIFIC_TZ,
     weekday: "short",
@@ -43,16 +35,7 @@ export function shouldProcessLeague(
   };
   const currentDay = dayMap[dayStr] ?? -1;
 
-  const hourPart = pacificParts.find((p) => p.type === "hour");
-  const minutePart = pacificParts.find((p) => p.type === "minute");
-  const currentHour = parseInt(hourPart?.value ?? "-1", 10);
-  const currentMinute = parseInt(minutePart?.value ?? "-1", 10);
-
-  return (
-    days.includes(currentDay) &&
-    currentHour === processHour &&
-    currentMinute === processMinute
-  );
+  return days.includes(currentDay);
 }
 
 /**
