@@ -319,6 +319,53 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
               </section>
             )}
 
+            {/* Former castaways (traded/dropped but still have points attributed) */}
+            {(() => {
+              const formerCastawayIds = scoreBreakdown.castaways
+                .map((c) => c.castaway_id)
+                .filter((id) => !teamCastawayIds.includes(id));
+
+              if (formerCastawayIds.length === 0) return null;
+
+              return (
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Former Castaways (points retained)
+                  </h2>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {formerCastawayIds.map((castawayId) => {
+                      const castaway = castawayMap.get(castawayId);
+                      const breakdown = breakdownMap.get(castawayId);
+                      if (!castaway || !breakdown || breakdown.total === 0) return null;
+                      return (
+                        <div key={castawayId} className="rounded-lg border border-dashed border-border bg-card/50 p-4">
+                          <div className="flex items-center gap-3">
+                            {castaway.photo_url ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={castaway.photo_url}
+                                alt={castaway.name}
+                                className="w-10 h-10 rounded-full object-cover shrink-0 grayscale opacity-60"
+                              />
+                            ) : (
+                              <span className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-sm font-medium text-muted-foreground shrink-0 opacity-60">
+                                {castaway.name.charAt(0)}
+                              </span>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-muted-foreground">{castaway.name}</span>
+                              <p className="text-xs text-muted-foreground">Traded/dropped — points retained from prior episodes</p>
+                            </div>
+                            <span className="tabular-nums font-bold text-sm">{breakdown.total} pts</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })()}
+
             {/* Challenge points summary */}
             {scoreBreakdown.challenge_points > 0 && (
               <section className="rounded-lg border border-border bg-card p-4 space-y-3">
