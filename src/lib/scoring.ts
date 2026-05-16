@@ -177,15 +177,33 @@ export function computePlayerScore(
         (episodePointsMap[event.episode_number] ?? 0) + event.points;
     }
 
-    // Consolation points for eliminated castaways (only if currently on team)
+    // Consolation points for eliminated castaways
+    // Only compute from formula if the events don't already have player_id set
+    // (i.e., legacy data). When player_id is set on consolation events, they're
+    // already counted in the episode_points loop above.
     let consolationPoints = 0;
     if (assignment) {
       const eliminatedEpisode = eliminationMap.get(castawayId);
       if (eliminatedEpisode !== undefined) {
-        const eligibleEpisodes = finalizedNumbers.filter(
-          (n) => n > eliminatedEpisode && n >= pointsFromEpisode
+        // Check if consolation events already have player_id attribution
+        const hasAttributedConsolation = episodeEvents.some(
+          (e) =>
+            e.castaway_id === castawayId &&
+            e.player_id === playerId &&
+            e.points > 0 &&
+            // Consolation events are positive points without a scoring rule
+            // We detect them by checking they're in episodes after elimination
+            e.episode_number > eliminatedEpisode
         );
-        consolationPoints = consolationPointsPerEpisode * eligibleEpisodes.length;
+
+        if (!hasAttributedConsolation) {
+          // Legacy path: compute from formula
+          const eligibleEpisodes = finalizedNumbers.filter(
+            (n) => n > eliminatedEpisode && n >= pointsFromEpisode
+          );
+          consolationPoints = consolationPointsPerEpisode * eligibleEpisodes.length;
+        }
+        // If consolation events have player_id, they're already in episodePointsMap
       }
     }
 
