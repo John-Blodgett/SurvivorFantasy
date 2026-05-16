@@ -320,4 +320,95 @@ describe("Integration: RLS Policy Enforcement", () => {
 
     expect(stillExists).not.toBeNull();
   });
+
+  // ---------------------------------------------------------------------------
+  // Admin CAN update league_members (e.g., waiver_budget_remaining)
+  // This test ensures the UPDATE RLS policy works for admin operations
+  // ---------------------------------------------------------------------------
+
+  it("should allow admin to update league_members waiver_budget_remaining via scoped client", async () => {
+    const admin = getAdminClient();
+
+    // Get the admin's scoped client (Player 1 is admin)
+    const adminScopedClient = await getScopedClient(
+      TEST_PLAYERS[0].email,
+      TEST_PLAYERS[0].password
+    );
+
+    // Get Player 2's current budget
+    const { data: before } = await admin
+      .from("league_members")
+      .select("waiver_budget_remaining")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1])
+      .single();
+
+    expect(before).not.toBeNull();
+    const originalBudget = before!.waiver_budget_remaining;
+
+    // Admin updates Player 2's budget via scoped client (subject to RLS)
+    const { error } = await adminScopedClient
+      .from("league_members")
+      .update({ waiver_budget_remaining: originalBudget - 10 })
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1]);
+
+    expect(error).toBeNull();
+
+    // Verify the update took effect
+    const { data: after } = await admin
+      .from("league_members")
+      .select("waiver_budget_remaining")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1])
+      .single();
+
+    expect(after!.waiver_budget_remaining).toBe(originalBudget - 10);
+
+    // Restore original budget
+    await admin
+      .from("league_members")
+      .update({ waiver_budget_remaining: originalBudget })
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Non-admin CANNOT update league_members
+  // ---------------------------------------------------------------------------
+
+  it("should reject league_members update from non-admin scoped client", async () => {
+    const admin = getAdminClient();
+
+    // Get Player 2's scoped client (non-admin)
+    const player2Client = await getScopedClient(
+      TEST_PLAYERS[1].email,
+      TEST_PLAYERS[1].password
+    );
+
+    // Get Player 2's current budget
+    const { data: before } = await admin
+      .from("league_members")
+      .select("waiver_budget_remaining")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1])
+      .single();
+
+    // Player 2 tries to update their own budget (should be blocked by RLS)
+    await player2Client
+      .from("league_members")
+      .update({ waiver_budget_remaining: 999 })
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1]);
+
+    // Verify budget is unchanged (RLS silently blocked the update)
+    const { data: after } = await admin
+      .from("league_members")
+      .select("waiver_budget_remaining")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[1])
+      .single();
+
+    expect(after!.waiver_budget_remaining).toBe(before!.waiver_budget_remaining);
+  });
 });
