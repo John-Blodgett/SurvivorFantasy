@@ -68,6 +68,26 @@ export default function BatchScoringForm({
 
   const eventCount = selectedCastawayIds.size * selectedRuleIds.size;
 
+  // Get unique tribe names for quick-select buttons
+  const tribeNames = [...new Set(castaways.map((c) => c.tribe_name).filter(Boolean))] as string[];
+
+  function selectTribe(tribeName: string) {
+    const tribeIds = new Set(
+      castaways.filter((c) => c.tribe_name === tribeName).map((c) => c.id)
+    );
+    // If all tribe members are already selected, deselect them
+    const allSelected = [...tribeIds].every((id) => selectedCastawayIds.has(id));
+    setSelectedCastawayIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        tribeIds.forEach((id) => next.delete(id));
+      } else {
+        tribeIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
   if (castaways.length === 0 || scoringRules.length === 0) {
     return null;
   }
@@ -92,6 +112,29 @@ export default function BatchScoringForm({
               {selectedCastawayIds.size === castaways.length ? "Deselect All" : "Select All"}
             </button>
           </div>
+          {/* Tribe quick-select buttons */}
+          {tribeNames.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {tribeNames.map((tribe) => {
+                const tribeIds = castaways.filter((c) => c.tribe_name === tribe).map((c) => c.id);
+                const allSelected = tribeIds.every((id) => selectedCastawayIds.has(id));
+                return (
+                  <button
+                    key={tribe}
+                    type="button"
+                    onClick={() => selectTribe(tribe)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      allSelected
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {tribe}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {castaways.map((c) => (
               <label
