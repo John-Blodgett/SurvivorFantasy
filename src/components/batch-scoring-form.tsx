@@ -69,14 +69,14 @@ export default function BatchScoringForm({
   const eventCount = selectedCastawayIds.size * selectedRuleIds.size;
 
   // Get unique tribe names for quick-select buttons
-  const tribeNames = [...new Set(castaways.map((c) => c.tribe_name).filter(Boolean))] as string[];
+  const tribeNames = Array.from(new Set(castaways.map((c) => c.tribe_name).filter((t): t is string => t !== null)));
 
   function selectTribe(tribeName: string) {
     const tribeIds = new Set(
       castaways.filter((c) => c.tribe_name === tribeName).map((c) => c.id)
     );
     // If all tribe members are already selected, deselect them
-    const allSelected = [...tribeIds].every((id) => selectedCastawayIds.has(id));
+    const allSelected = Array.from(tribeIds).every((id) => selectedCastawayIds.has(id));
     setSelectedCastawayIds((prev) => {
       const next = new Set(prev);
       if (allSelected) {
