@@ -1,13 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
 
 interface PageProps {
   params: { id: string };
+  searchParams: { episode?: string };
 }
 
-export default async function ScoringLogPage({ params }: PageProps) {
+export default async function ScoringLogPage({ params, searchParams }: PageProps) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/");
@@ -35,9 +37,22 @@ export default async function ScoringLogPage({ params }: PageProps) {
 
   const isAdmin = league.admin_id === user.id;
 
+  // Parse episode filter from search params
+  const episodeFilter = searchParams.episode ? parseInt(searchParams.episode, 10) : null;
+
+  // Fetch all finalized episodes for the sub-nav
+  const { data: allEpisodes } = await supabase
+    .from("episodes")
+    .select("number")
+    .eq("league_id", leagueId)
+    .eq("is_finalized", true)
+    .order("number", { ascending: true });
+
+  const episodeNumbers = (allEpisodes ?? []).map((e) => e.number);
+
   // Fetch all episode events with joins for castaway name, scoring rule name,
   // player name, and episode number
-  const { data: eventsRaw } = await supabase
+  let query = supabase
     .from("episode_events")
     .select(`
       id,
@@ -51,8 +66,13 @@ export default async function ScoringLogPage({ params }: PageProps) {
       scoring_rules(name)
     `)
     .eq("episodes.league_id", leagueId)
-    .eq("episodes.is_finalized", true)
-    .order("created_at", { ascending: true });
+    .eq("episodes.is_finalized", true);
+
+  if (episodeFilter) {
+    query = query.eq("episodes.number", episodeFilter);
+  }
+
+  const { data: eventsRaw } = await query.order("created_at", { ascending: true });
 
   // Fetch all profiles for player name lookup
   const { data: profiles } = await supabase
@@ -102,6 +122,35 @@ export default async function ScoringLogPage({ params }: PageProps) {
         <p className="text-sm text-muted-foreground">
           Every scoring event across all finalized episodes, showing which player&apos;s team received the points.
         </p>
+
+        {/* Episode sub-navigation */}
+        {episodeNumbers.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={`/league/${leagueId}/scoring`}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                !episodeFilter
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              All Episodes
+            </Link>
+            {episodeNumbers.map((num) => (
+              <Link
+                key={num}
+                href={`/league/${leagueId}/scoring?episode=${num}`}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  episodeFilter === num
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Ep {num}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {events.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
