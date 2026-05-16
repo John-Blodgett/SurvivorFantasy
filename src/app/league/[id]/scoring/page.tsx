@@ -336,7 +336,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
           </div>
         )}
 
-        {/* Events table */}
+        {/* Events list */}
         {events.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
             <p className="text-muted-foreground text-sm">
@@ -344,8 +344,72 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
             </p>
           </div>
         ) : (
-          <div className="rounded-lg border border-border overflow-hidden">
-            <div className="overflow-x-auto">
+          <>
+            {/* Mobile: card layout */}
+            <div className="space-y-2 lg:hidden">
+              {events.map((event) => (
+                <div
+                  key={event.id}
+                  className="rounded-lg border border-border bg-card px-3 py-2.5 flex items-center gap-3"
+                >
+                  {/* Avatar / icon */}
+                  {event.castaway_id ? (
+                    <Link href={filterUrl({ castaway: event.castaway_id })} className="shrink-0">
+                      {event.castaway_photo ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={event.castaway_photo} alt={event.castaway_name} className="w-9 h-9 rounded-full object-cover" />
+                      ) : (
+                        <span className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                          {event.castaway_name.charAt(0)}
+                        </span>
+                      )}
+                    </Link>
+                  ) : (
+                    <span className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-sm shrink-0">🏆</span>
+                  )}
+
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      {event.castaway_id ? (
+                        <Link href={filterUrl({ castaway: event.castaway_id })} className="text-sm font-semibold truncate hover:underline">
+                          {event.castaway_name}
+                        </Link>
+                      ) : (
+                        <span className="text-sm font-semibold truncate">Challenge</span>
+                      )}
+                      {event.episode_number > 0 && (
+                        <span className="text-[10px] text-muted-foreground bg-muted rounded px-1 py-0.5 shrink-0">
+                          Ep {event.episode_number}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+                      <span className="truncate">{event.rule_name ?? "—"}</span>
+                      <span>·</span>
+                      <Link href={filterUrl({ player: event.player_id })} className="truncate hover:underline">
+                        {event.player_name}
+                      </Link>
+                    </div>
+                  </div>
+
+                  {/* Points */}
+                  <div className="text-right shrink-0">
+                    <p className={`text-sm font-bold tabular-nums ${
+                      event.points > 0 ? "text-green-700" : event.points < 0 ? "text-destructive" : ""
+                    }`}>
+                      {event.points > 0 ? `+${event.points}` : event.points}
+                    </p>
+                    {event.running_total !== null && (
+                      <p className="text-[10px] text-muted-foreground tabular-nums">{event.running_total} total</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: table layout */}
+            <div className="hidden lg:block rounded-lg border border-border overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
@@ -374,11 +438,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                           >
                             {event.castaway_photo ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={event.castaway_photo}
-                                alt={event.castaway_name}
-                                className="w-6 h-6 rounded-full object-cover shrink-0"
-                              />
+                              <img src={event.castaway_photo} alt={event.castaway_name} className="w-6 h-6 rounded-full object-cover shrink-0" />
                             ) : (
                               <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
                                 {event.castaway_name.charAt(0)}
@@ -390,19 +450,14 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                           <span className="text-muted-foreground italic">🏆 Challenge</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-muted-foreground">
-                        {event.rule_name ?? "—"}
-                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{event.rule_name ?? "—"}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${
                         event.points > 0 ? "text-green-700" : event.points < 0 ? "text-destructive" : ""
                       }`}>
                         {event.points > 0 ? `+${event.points}` : event.points}
                       </td>
                       <td className="px-3 py-2.5">
-                        <Link
-                          href={filterUrl({ player: event.player_id })}
-                          className="hover:underline"
-                        >
+                        <Link href={filterUrl({ player: event.player_id })} className="hover:underline">
                           {event.player_name}
                         </Link>
                       </td>
@@ -414,7 +469,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                 </tbody>
               </table>
             </div>
-          </div>
+          </>
         )}
       </div>
     </AppShell>
