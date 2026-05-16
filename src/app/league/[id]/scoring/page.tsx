@@ -6,7 +6,7 @@ import { getAllLeagueNavLinks } from "@/components/league-nav";
 
 interface PageProps {
   params: { id: string };
-  searchParams: { episode?: string; player?: string; castaway?: string };
+  searchParams: { episode?: string; player?: string; castaway?: string; show?: string };
 }
 
 export default async function ScoringLogPage({ params, searchParams }: PageProps) {
@@ -41,6 +41,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   const episodeFilter = searchParams.episode ? parseInt(searchParams.episode, 10) : null;
   const playerFilter = searchParams.player ?? null;
   const castawayFilter = searchParams.castaway ?? null;
+  const showAll = searchParams.show === "all"; // default: only show events assigned to a player
 
   // Fetch all finalized episodes for the sub-nav
   const { data: allEpisodes } = await supabase
@@ -96,6 +97,9 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   }
   if (playerFilter) {
     query = query.eq("player_id", playerFilter);
+  }
+  if (!showAll && !playerFilter) {
+    query = query.not("player_id", "is", null);
   }
   if (castawayFilter) {
     query = query.eq("castaway_id", castawayFilter);
@@ -179,14 +183,16 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   }
 
   // Build filter URL helper
-  function filterUrl(overrides: { episode?: string | null; player?: string | null; castaway?: string | null }) {
+  function filterUrl(overrides: { episode?: string | null; player?: string | null; castaway?: string | null; show?: string | null }) {
     const params = new URLSearchParams();
     const ep = overrides.episode !== undefined ? overrides.episode : searchParams.episode;
     const pl = overrides.player !== undefined ? overrides.player : searchParams.player;
     const ca = overrides.castaway !== undefined ? overrides.castaway : searchParams.castaway;
+    const sh = overrides.show !== undefined ? overrides.show : searchParams.show;
     if (ep) params.set("episode", ep);
     if (pl) params.set("player", pl);
     if (ca) params.set("castaway", ca);
+    if (sh) params.set("show", sh);
     const qs = params.toString();
     return `/league/${leagueId}/scoring${qs ? `?${qs}` : ""}`;
   }
@@ -253,9 +259,19 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
             <p className="text-xs font-medium text-muted-foreground">Player</p>
             <div className="flex flex-wrap gap-2">
               <Link
-                href={filterUrl({ player: null })}
+                href={filterUrl({ player: null, show: null })}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  !playerFilter
+                  !playerFilter && !showAll
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Assigned
+              </Link>
+              <Link
+                href={filterUrl({ player: null, show: "all" })}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  !playerFilter && showAll
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
                 }`}
