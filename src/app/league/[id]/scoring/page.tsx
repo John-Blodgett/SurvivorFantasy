@@ -368,40 +368,36 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                     <span className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-sm shrink-0">🏆</span>
                   )}
 
-                  {/* Details */}
+                  {/* Details — single row with wrapping */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold truncate">
                       {event.castaway_id ? (
-                        <Link href={filterUrl({ castaway: event.castaway_id })} className="text-sm font-semibold truncate hover:underline">
+                        <Link href={filterUrl({ castaway: event.castaway_id })} className="hover:underline">
                           {event.castaway_name}
                         </Link>
                       ) : (
-                        <span className="text-sm font-semibold truncate">Challenge</span>
+                        "Challenge"
                       )}
                       {event.episode_number > 0 && (
-                        <span className="text-[10px] text-muted-foreground bg-muted rounded px-1 py-0.5 shrink-0">
+                        <span className="ml-1.5 text-[10px] font-normal text-muted-foreground bg-muted rounded px-1 py-0.5">
                           Ep {event.episode_number}
                         </span>
                       )}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                      <span className="truncate">{event.rule_name ?? "—"}</span>
-                      <span>·</span>
-                      <Link href={filterUrl({ player: event.player_id })} className="truncate hover:underline">
-                        {event.player_name}
-                      </Link>
-                    </div>
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {event.rule_name ?? "—"} · <Link href={filterUrl({ player: event.player_id })} className="hover:underline">{event.player_name}</Link>
+                    </p>
                   </div>
 
                   {/* Points */}
-                  <div className="text-right shrink-0">
+                  <div className="text-right shrink-0 pl-2">
                     <p className={`text-sm font-bold tabular-nums ${
                       event.points > 0 ? "text-green-700" : event.points < 0 ? "text-destructive" : ""
                     }`}>
                       {event.points > 0 ? `+${event.points}` : event.points}
                     </p>
                     {event.running_total !== null && (
-                      <p className="text-[10px] text-muted-foreground tabular-nums">{event.running_total} total</p>
+                      <p className="text-[10px] text-muted-foreground tabular-nums">{event.running_total}</p>
                     )}
                   </div>
                 </div>
