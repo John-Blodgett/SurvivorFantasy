@@ -6,7 +6,7 @@ import { getAllLeagueNavLinks } from "@/components/league-nav";
 
 interface PageProps {
   params: { id: string };
-  searchParams: { episode?: string };
+  searchParams: { episode?: string; player?: string; castaway?: string };
 }
 
 export default async function ScoringLogPage({ params, searchParams }: PageProps) {
@@ -37,8 +37,10 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
 
   const isAdmin = league.admin_id === user.id;
 
-  // Parse episode filter from search params
+  // Parse filters from search params
   const episodeFilter = searchParams.episode ? parseInt(searchParams.episode, 10) : null;
+  const playerFilter = searchParams.player ?? null;
+  const castawayFilter = searchParams.castaway ?? null;
 
   // Fetch all finalized episodes for the sub-nav
   const { data: allEpisodes } = await supabase
@@ -50,8 +52,29 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
 
   const episodeNumbers = (allEpisodes ?? []).map((e) => e.number);
 
-  // Fetch all episode events with joins for castaway name, scoring rule name,
-  // player name, and episode number
+  // Fetch all league members for player filter
+  const { data: members } = await supabase
+    .from("league_members")
+    .select("player_id, profiles(display_name)")
+    .eq("league_id", leagueId);
+
+  const players = (members ?? []).map((m) => ({
+    id: m.player_id,
+    name: (m.profiles as unknown as { display_name: string } | null)?.display_name ?? "Unknown",
+  }));
+
+  // Fetch all castaways for photos and castaway filter
+  const { data: allCastaways } = await supabase
+    .from("castaways")
+    .select("id, name, photo_url")
+    .eq("league_id", leagueId)
+    .order("name");
+
+  const castawayMap = new Map(
+    (allCastaways ?? []).map((c) => [c.id, { name: c.name, photo_url: c.photo_url }])
+  );
+
+  // Fetch episode events
   let query = supabase
     .from("episode_events")
     .select(`
@@ -71,16 +94,18 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   if (episodeFilter) {
     query = query.eq("episodes.number", episodeFilter);
   }
+  if (playerFilter) {
+    query = query.eq("player_id", playerFilter);
+  }
+  if (castawayFilter) {
+    query = query.eq("castaway_id", castawayFilter);
+  }
 
   const { data: eventsRaw } = await query.order("created_at", { ascending: true });
 
   // Fetch all profiles for player name lookup
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, display_name");
-
   const profileMap = new Map(
-    (profiles ?? []).map((p) => [p.id, p.display_name])
+    players.map((p) => [p.id, p.name])
   );
 
   // Build the scoring log with running totals per player
@@ -92,6 +117,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
     const rule = e.scoring_rules as Record<string, unknown> | null;
     const playerId = e.player_id as string | null;
     const points = e.points as number;
+    const castawayId = e.castaway_id as string;
 
     // Update running total for this player
     if (playerId) {
@@ -102,7 +128,9 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
     return {
       id: e.id as string,
       episode_number: episode.number as number,
+      castaway_id: castawayId,
       castaway_name: castaway.name as string,
+      castaway_photo: castawayMap.get(castawayId)?.photo_url ?? null,
       rule_name: rule?.name as string | null ?? (points > 0 ? "Consolation" : null),
       points,
       player_name: playerId ? (profileMap.get(playerId) ?? "Unknown") : "Unassigned",
@@ -110,6 +138,31 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       running_total: playerId ? playerTotals.get(playerId)! : null,
     };
   });
+
+  // Build filter URL helper
+  function filterUrl(overrides: { episode?: string | null; player?: string | null; castaway?: string | null }) {
+    const params = new URLSearchParams();
+    const ep = overrides.episode !== undefined ? overrides.episode : searchParams.episode;
+    const pl = overrides.player !== undefined ? overrides.player : searchParams.player;
+    const ca = overrides.castaway !== undefined ? overrides.castaway : searchParams.castaway;
+    if (ep) params.set("episode", ep);
+    if (pl) params.set("player", pl);
+    if (ca) params.set("castaway", ca);
+    const qs = params.toString();
+    return `/league/${leagueId}/scoring${qs ? `?${qs}` : ""}`;
+  }
+
+  // Castaway breakdown (when a castaway is selected)
+  let castawayBreakdown: { episode: number; points: number; rule: string | null }[] | null = null;
+  if (castawayFilter) {
+    castawayBreakdown = events.map((e) => ({
+      episode: e.episode_number,
+      points: e.points,
+      rule: e.rule_name,
+    }));
+  }
+
+  const selectedCastawayName = castawayFilter ? castawayMap.get(castawayFilter)?.name : null;
 
   return (
     <AppShell
@@ -120,42 +173,135 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
     >
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <p className="text-sm text-muted-foreground">
-          Every scoring event across all finalized episodes, showing which player&apos;s team received the points.
+          Every scoring event across finalized episodes. Filter by episode, player, or click a castaway for their breakdown.
         </p>
 
-        {/* Episode sub-navigation */}
+        {/* Episode filter pills */}
         {episodeNumbers.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            <Link
-              href={`/league/${leagueId}/scoring`}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                !episodeFilter
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              All Episodes
-            </Link>
-            {episodeNumbers.map((num) => (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Episode</p>
+            <div className="flex flex-wrap gap-2">
               <Link
-                key={num}
-                href={`/league/${leagueId}/scoring?episode=${num}`}
+                href={filterUrl({ episode: null })}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  episodeFilter === num
+                  !episodeFilter
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
                 }`}
               >
-                Ep {num}
+                All
               </Link>
-            ))}
+              {episodeNumbers.map((num) => (
+                <Link
+                  key={num}
+                  href={filterUrl({ episode: String(num) })}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    episodeFilter === num
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  Ep {num}
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 
+        {/* Player filter pills */}
+        {players.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Player</p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={filterUrl({ player: null })}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  !playerFilter
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                All
+              </Link>
+              {players.map((p) => (
+                <Link
+                  key={p.id}
+                  href={filterUrl({ player: p.id })}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    playerFilter === p.id
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  }`}
+                >
+                  {p.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Castaway breakdown view */}
+        {castawayFilter && castawayBreakdown && (
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {castawayMap.get(castawayFilter)?.photo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={castawayMap.get(castawayFilter)!.photo_url!}
+                    alt={selectedCastawayName ?? ""}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                    {selectedCastawayName?.charAt(0)}
+                  </span>
+                )}
+                <h3 className="text-sm font-semibold">{selectedCastawayName} — Episode Breakdown</h3>
+              </div>
+              <Link
+                href={filterUrl({ castaway: null })}
+                className="text-xs text-primary hover:underline"
+              >
+                Clear
+              </Link>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Episode</th>
+                  <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Event</th>
+                  <th className="px-2 py-1.5 text-right font-medium text-muted-foreground">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {castawayBreakdown.map((row, i) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="px-2 py-1.5 tabular-nums">{row.episode}</td>
+                    <td className="px-2 py-1.5 text-muted-foreground">{row.rule ?? "—"}</td>
+                    <td className={`px-2 py-1.5 text-right tabular-nums font-semibold ${
+                      row.points > 0 ? "text-green-700" : row.points < 0 ? "text-destructive" : ""
+                    }`}>
+                      {row.points > 0 ? `+${row.points}` : row.points}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-muted/30">
+                  <td className="px-2 py-1.5 font-semibold" colSpan={2}>Total</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums font-bold">
+                    {castawayBreakdown.reduce((s, r) => s + r.points, 0)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Events table */}
         {events.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
             <p className="text-muted-foreground text-sm">
-              No scoring events yet. Finalize an episode to see the log.
+              No scoring events match the current filters.
             </p>
           </div>
         ) : (
@@ -169,7 +315,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Event</th>
                     <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Pts</th>
                     <th className="px-3 py-2.5 text-left font-medium text-muted-foreground">Team</th>
-                    <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Running Total</th>
+                    <th className="px-3 py-2.5 text-right font-medium text-muted-foreground">Running</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -181,8 +327,25 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                       <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
                         {event.episode_number}
                       </td>
-                      <td className="px-3 py-2.5 font-medium">
-                        {event.castaway_name}
+                      <td className="px-3 py-2.5">
+                        <Link
+                          href={filterUrl({ castaway: event.castaway_id })}
+                          className="flex items-center gap-2 hover:underline"
+                        >
+                          {event.castaway_photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={event.castaway_photo}
+                              alt={event.castaway_name}
+                              className="w-6 h-6 rounded-full object-cover shrink-0"
+                            />
+                          ) : (
+                            <span className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                              {event.castaway_name.charAt(0)}
+                            </span>
+                          )}
+                          <span className="font-medium">{event.castaway_name}</span>
+                        </Link>
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground">
                         {event.rule_name ?? "—"}
@@ -193,7 +356,12 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                         {event.points > 0 ? `+${event.points}` : event.points}
                       </td>
                       <td className="px-3 py-2.5">
-                        {event.player_name}
+                        <Link
+                          href={filterUrl({ player: event.player_id })}
+                          className="hover:underline"
+                        >
+                          {event.player_name}
+                        </Link>
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums font-medium text-muted-foreground">
                         {event.running_total !== null ? event.running_total : "—"}
