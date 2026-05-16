@@ -7,6 +7,7 @@ import { buildConsolationEvents } from "@/lib/episodes";
 import { validateCreateChallenge } from "@/lib/challenges";
 import { buildTribeEvents } from "@/lib/tribes";
 import { buildBatchEvents } from "@/lib/scoring";
+import { toPacificISO } from "@/lib/timezone";
 import { requireLeagueAdmin } from "../../helpers";
 
 async function ensureEpisode(
@@ -200,10 +201,11 @@ export async function createChallengeAction(formData: FormData) {
   if (!validation.valid) redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
 
   const episodeId = await ensureEpisode(supabase, leagueId, episodeNumber);
+  const deadlinePacific = toPacificISO(deadline);
 
   const { error } = await supabase.from("challenges").insert({
     league_id: leagueId, episode_id: episodeId,
-    title: title.trim(), description: description?.trim() || null, points, deadline,
+    title: title.trim(), description: description?.trim() || null, points, deadline: deadlinePacific,
   });
 
   if (error) redirect(`${basePath}?error=${encodeURIComponent("Failed to create challenge.")}`);
@@ -235,8 +237,10 @@ export async function updateChallengeAction(formData: FormData) {
     redirect(`${basePath}?error=${encodeURIComponent("Cannot edit a challenge after its deadline.")}`);
   }
 
+  const deadlinePacific = toPacificISO(deadline);
+
   const { error } = await supabase.from("challenges").update({
-    title: title.trim(), description: description?.trim() || null, points, deadline,
+    title: title.trim(), description: description?.trim() || null, points, deadline: deadlinePacific,
   }).eq("id", challengeId);
 
   if (error) redirect(`${basePath}?error=${encodeURIComponent("Failed to update challenge.")}`);

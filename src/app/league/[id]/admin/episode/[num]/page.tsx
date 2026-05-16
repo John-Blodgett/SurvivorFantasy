@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import EpisodeScorerForm from "@/components/episode-scorer-form";
 import BatchScoringForm from "@/components/batch-scoring-form";
+import { formatPacificDeadline, toPacificDatetimeLocal } from "@/lib/timezone";
 import type { Castaway } from "@/lib/castaways";
 import type { ScoringRule } from "@/lib/scoring-rules";
 import type { EpisodeEvent } from "@/lib/episodes";
@@ -239,7 +240,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
                   <input id="challenge-points" name="points" type="number" min="1" required className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm" placeholder="5" />
                 </div>
                 <div>
-                  <label htmlFor="challenge-deadline" className="text-sm font-medium">Deadline</label>
+                  <label htmlFor="challenge-deadline" className="text-sm font-medium">Deadline (Pacific)</label>
                   <input id="challenge-deadline" name="deadline" type="datetime-local" required className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm" />
                 </div>
               </div>
@@ -314,7 +315,7 @@ function ChallengeCard({
           <h3 className="text-sm font-semibold">{challenge.title}</h3>
           {challenge.description && <p className="text-xs text-muted-foreground mt-0.5">{challenge.description}</p>}
           <p className="text-xs text-muted-foreground mt-1">
-            {challenge.points} pts · Deadline: {new Date(challenge.deadline).toLocaleString()}
+            {challenge.points} pts · Deadline: {formatPacificDeadline(challenge.deadline)} PT
             {isPastDeadline && <span className="ml-2 text-amber-600 font-medium">Past deadline</span>}
           </p>
         </div>
@@ -331,7 +332,7 @@ function ChallengeCard({
                   <textarea name="description" defaultValue={challenge.description ?? ""} className="w-full rounded border border-input bg-background px-2 py-1 text-sm" rows={2} />
                   <div className="grid grid-cols-2 gap-2">
                     <input name="points" type="number" min="1" defaultValue={challenge.points} required className="w-full rounded border border-input bg-background px-2 py-1 text-sm" />
-                    <input name="deadline" type="datetime-local" defaultValue={challenge.deadline.slice(0, 16)} required className="w-full rounded border border-input bg-background px-2 py-1 text-sm" />
+                    <input name="deadline" type="datetime-local" defaultValue={toPacificDatetimeLocal(challenge.deadline)} required className="w-full rounded border border-input bg-background px-2 py-1 text-sm" />
                   </div>
                   <SubmitButton pendingText="Saving…" className="rounded bg-primary text-primary-foreground px-3 py-1 text-xs font-medium disabled:opacity-50">Save</SubmitButton>
                 </form>

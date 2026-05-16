@@ -5,6 +5,7 @@ import { getAllLeagueNavLinks } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
 import EditChallengeResponse from "@/components/edit-challenge-response";
 import { submitChallengeResponseAction } from "./actions";
+import { formatPacificDeadline } from "@/lib/timezone";
 
 interface PageProps {
   params: { id: string };
@@ -128,7 +129,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                       )}
                       <p className="text-xs text-muted-foreground mt-1">
                         Episode {challenge.episode_number} · {challenge.points} pts ·
-                        Deadline: {deadline.toLocaleString()}
+                        Deadline: {formatPacificDeadline(challenge.deadline)} PT
                       </p>
                     </div>
                     <div className="shrink-0">
