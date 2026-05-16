@@ -10,14 +10,14 @@ export async function updateWaiverScheduleAction(formData: FormData) {
   const { supabase } = await requireLeagueAdmin(leagueId);
   const basePath = `/league/${leagueId}/admin/waiver`;
 
-  const processDay = parseInt(formData.get("waiver_process_day") as string, 10);
+  const processDays = formData.getAll("waiver_process_days") as string[];
   const processHour = parseInt(formData.get("waiver_process_hour") as string, 10);
   const processMinute = parseInt(formData.get("waiver_process_minute") as string, 10);
 
   const { error } = await supabase
     .from("leagues")
     .update({
-      waiver_process_day: processDay,
+      waiver_process_days: processDays.length > 0 ? processDays.join(",") : null,
       waiver_process_hour: processHour,
       waiver_process_minute: processMinute,
     })

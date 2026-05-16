@@ -293,7 +293,7 @@ describe("Integration: Admin Tools", () => {
     const { error } = await admin
       .from("leagues")
       .update({
-        waiver_process_day: 3,
+        waiver_process_days: "1,3,5",
         waiver_process_hour: 18,
         waiver_process_minute: 0,
       })
@@ -303,11 +303,11 @@ describe("Integration: Admin Tools", () => {
 
     const { data } = await admin
       .from("leagues")
-      .select("waiver_process_day, waiver_process_hour, waiver_process_minute")
+      .select("waiver_process_days, waiver_process_hour, waiver_process_minute")
       .eq("id", leagueId)
       .single();
 
-    expect(data!.waiver_process_day).toBe(3);
+    expect(data!.waiver_process_days).toBe("1,3,5");
     expect(data!.waiver_process_hour).toBe(18);
     expect(data!.waiver_process_minute).toBe(0);
   });

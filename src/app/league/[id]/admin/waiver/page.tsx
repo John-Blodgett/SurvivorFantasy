@@ -24,7 +24,7 @@ export default async function AdminWaiverPage({ params, searchParams }: PageProp
 
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, waiver_budget, waiver_process_day, waiver_process_hour, waiver_process_minute, admin_id")
+    .select("id, name, waiver_budget, waiver_process_days, waiver_process_hour, waiver_process_minute, admin_id")
     .eq("id", leagueId)
     .single();
 
@@ -93,26 +93,32 @@ export default async function AdminWaiverPage({ params, searchParams }: PageProp
 
         {/* Processing schedule configuration */}
         <section className="rounded-lg border border-border bg-card p-4 space-y-3">
-          <h2 className="text-sm font-semibold">Processing Schedule</h2>
+          <h2 className="text-sm font-semibold">Processing Schedule (Pacific Time)</h2>
           <form action={updateWaiverScheduleAction} className="space-y-3">
             <input type="hidden" name="league_id" value={leagueId} />
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium mb-1">Day</label>
-                <select
-                  name="waiver_process_day"
-                  defaultValue={league.waiver_process_day ?? 3}
-                  className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
-                >
-                  {DAYS.map((day, i) => (
-                    <option key={i} value={i}>
+            <div>
+              <label className="block text-xs font-medium mb-2">Days</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {DAYS.map((day, i) => {
+                  const selectedDays = (league.waiver_process_days ?? "").split(",").filter(Boolean);
+                  return (
+                    <label key={i} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="waiver_process_days"
+                        value={i}
+                        defaultChecked={selectedDays.includes(String(i))}
+                        className="rounded border-input"
+                      />
                       {day}
-                    </option>
-                  ))}
-                </select>
+                    </label>
+                  );
+                })}
               </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium mb-1">Hour</label>
+                <label className="block text-xs font-medium mb-1">Hour (PT)</label>
                 <input
                   type="number"
                   name="waiver_process_hour"
