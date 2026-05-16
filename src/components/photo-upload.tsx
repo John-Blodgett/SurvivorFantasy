@@ -30,7 +30,7 @@ export default function PhotoUpload({ onUpload }: PhotoUploadProps) {
 
       const { error: uploadError } = await supabase.storage
         .from("photos")
-        .upload(path, file, { upsert: false });
+        .upload(path, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
