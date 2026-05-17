@@ -108,7 +108,7 @@ describe("Property 14: Waiver claim winner has highest bid", () => {
           }));
 
           // Use deterministic tiebreak (always pick first)
-          const result = processWaiverClaims(claims, nextEpisode, () => 0);
+          const result = processWaiverClaims(claims, nextEpisode, undefined, () => 0);
 
           // Find the winning claim
           const wonResult = result.results.find((r) => r.status === "won");
@@ -150,7 +150,7 @@ describe("Property 14: Waiver claim winner has highest bid", () => {
             status: "pending" as const,
           }));
 
-          const result = processWaiverClaims(claims, nextEpisode, () => 0);
+          const result = processWaiverClaims(claims, nextEpisode, undefined, () => 0);
 
           const winners = result.results.filter((r) => r.status === "won");
           const losers = result.results.filter((r) => r.status === "lost");
@@ -211,7 +211,7 @@ describe("Property 15: Waiver budget is never over-spent", () => {
             status: "pending" as const,
           }));
 
-          const result = processWaiverClaims(claims, 5, () => 0);
+          const result = processWaiverClaims(claims, 5, undefined, () => 0);
 
           // Sum all budget deductions for this player
           const totalDeducted = result.results
@@ -260,7 +260,7 @@ describe("Property 16: Losing waiver claimants are not charged", () => {
             status: "pending" as const,
           }));
 
-          const result = processWaiverClaims(claims, nextEpisode, () => 0);
+          const result = processWaiverClaims(claims, nextEpisode, undefined, () => 0);
 
           // All losing claims must have zero budget deducted
           const lostResults = result.results.filter((r) => r.status === "lost");
@@ -271,5 +271,86 @@ describe("Property 16: Losing waiver claimants are not charged", () => {
       ),
       { numRuns: 20 }
     );
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Budget enforcement: player cannot win claims exceeding remaining budget
+// ---------------------------------------------------------------------------
+
+describe("Budget enforcement during processing", () => {
+  it("skips a claim if the player can no longer afford it after winning a prior claim", () => {
+    // Player has $70 budget, bids $30 on John (drop Car) and $70 on Time (drop Rock)
+    const claims: WaiverClaim[] = [
+      {
+        id: "claim-1",
+        league_id: "league-1",
+        player_id: "player-1",
+        castaway_id: "john-id",
+        drop_castaway_id: "car-id",
+        bid_amount: 30,
+        priority: 1,
+        status: "pending",
+      },
+      {
+        id: "claim-2",
+        league_id: "league-1",
+        player_id: "player-1",
+        castaway_id: "time-id",
+        drop_castaway_id: "rock-id",
+        bid_amount: 70,
+        priority: 2,
+        status: "pending",
+      },
+    ];
+
+    const playerBudgets = new Map([["player-1", 70]]);
+    const result = processWaiverClaims(claims, 5, playerBudgets, () => 0);
+
+    // The $70 bid (highest) processes first due to sorting by bid amount
+    // Player wins Time for $70, budget goes to $0
+    // Then $30 bid for John can't be afforded — marked lost
+    const timeResult = result.results.find((r) => r.claim_id === "claim-2");
+    const johnResult = result.results.find((r) => r.claim_id === "claim-1");
+
+    expect(timeResult!.status).toBe("won");
+    expect(timeResult!.budget_deducted).toBe(70);
+    expect(johnResult!.status).toBe("lost");
+    expect(johnResult!.budget_deducted).toBe(0);
+  });
+
+  it("allows both claims to win if budget is sufficient", () => {
+    const claims: WaiverClaim[] = [
+      {
+        id: "claim-1",
+        league_id: "league-1",
+        player_id: "player-1",
+        castaway_id: "john-id",
+        drop_castaway_id: "car-id",
+        bid_amount: 30,
+        priority: 1,
+        status: "pending",
+      },
+      {
+        id: "claim-2",
+        league_id: "league-1",
+        player_id: "player-1",
+        castaway_id: "time-id",
+        drop_castaway_id: "rock-id",
+        bid_amount: 70,
+        priority: 2,
+        status: "pending",
+      },
+    ];
+
+    const playerBudgets = new Map([["player-1", 100]]);
+    const result = processWaiverClaims(claims, 5, playerBudgets, () => 0);
+
+    const timeResult = result.results.find((r) => r.claim_id === "claim-2");
+    const johnResult = result.results.find((r) => r.claim_id === "claim-1");
+
+    expect(timeResult!.status).toBe("won");
+    expect(johnResult!.status).toBe("won");
   });
 });

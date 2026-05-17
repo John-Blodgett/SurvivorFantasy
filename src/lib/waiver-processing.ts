@@ -77,6 +77,18 @@ export async function processLeagueWaivers(leagueId: string): Promise<number> {
     return 0;
   }
 
+  // Fetch player budgets for budget enforcement during processing
+  const playerIds = Array.from(new Set(pendingClaims.map((c) => c.player_id)));
+  const { data: memberBudgets } = await supabase
+    .from("league_members")
+    .select("player_id, waiver_budget_remaining")
+    .eq("league_id", leagueId)
+    .in("player_id", playerIds);
+
+  const playerBudgets = new Map<string, number>(
+    (memberBudgets ?? []).map((m) => [m.player_id, m.waiver_budget_remaining])
+  );
+
   const { data: episodes } = await supabase
     .from("episodes")
     .select("number")
@@ -85,7 +97,7 @@ export async function processLeagueWaivers(leagueId: string): Promise<number> {
     .limit(1);
 
   const nextEpisodeNumber = (episodes?.[0]?.number ?? 0) + 1;
-  const result = processWaiverClaims(pendingClaims, nextEpisodeNumber);
+  const result = processWaiverClaims(pendingClaims, nextEpisodeNumber, playerBudgets);
 
   for (const claimResult of result.results) {
     await supabase

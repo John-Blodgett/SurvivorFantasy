@@ -154,18 +154,20 @@ export function validateWaiverClaim(
  * Processing order:
  * 1. Group claims by target castaway
  * 2. For each target, pick the winner by highest bid (priority as tiebreak, then random)
- * 3. When a player wins a claim, invalidate their lower-priority claims that
- *    share the same drop castaway (since that castaway is no longer available to drop)
+ * 3. When a player wins a claim, deduct from their budget and invalidate claims
+ *    they can no longer afford or that share the same drop castaway
  *
  * Requirements: 18.4, 18.5, 18.6, 18.8, 18.9
  *
  * @param claims - All pending claims to process (should include priority field)
  * @param nextEpisodeNumber - The episode number to set as points_from_episode for new assignments
+ * @param playerBudgets - Map of player_id to their remaining budget (optional; if not provided, budget is not enforced)
  * @param randomTiebreak - Function to pick a winner index from tied claims (for testability)
  */
 export function processWaiverClaims(
   claims: WaiverClaim[],
   nextEpisodeNumber: number,
+  playerBudgets?: Map<string, number>,
   randomTiebreak: (count: number) => number = (count) =>
     Math.floor(Math.random() * count)
 ): WaiverProcessingResult {
@@ -180,6 +182,8 @@ export function processWaiverClaims(
   const wonCastawayIds = new Set<string>();
   // Track which drop castaways have been used by each player
   const usedDropsByPlayer = new Map<string, Set<string>>();
+  // Track remaining budget per player during processing
+  const budgetRemaining = new Map<string, number>(playerBudgets ?? []);
 
   // Sort all claims: highest bid first, then lowest priority number (highest priority), then random
   const sortedClaims = [...claims].sort((a, b) => {
@@ -199,9 +203,17 @@ export function processWaiverClaims(
   // Process each target castaway group
   for (const [castawayId, groupClaims] of Array.from(claimsByTarget.entries())) {
     // Filter out claims from players whose drop castaway is already used
+    // or who can no longer afford their bid
     const eligibleClaims = groupClaims.filter((c) => {
       const usedDrops = usedDropsByPlayer.get(c.player_id);
-      return !usedDrops?.has(c.drop_castaway_id);
+      if (usedDrops?.has(c.drop_castaway_id)) return false;
+
+      // Budget check: skip if player can't afford this bid
+      if (playerBudgets && budgetRemaining.has(c.player_id)) {
+        if (c.bid_amount > budgetRemaining.get(c.player_id)!) return false;
+      }
+
+      return true;
     });
 
     if (eligibleClaims.length === 0) {
@@ -241,6 +253,14 @@ export function processWaiverClaims(
     });
 
     wonCastawayIds.add(castawayId);
+
+    // Deduct budget for the winner
+    if (budgetRemaining.has(winner.player_id)) {
+      budgetRemaining.set(
+        winner.player_id,
+        budgetRemaining.get(winner.player_id)! - winner.bid_amount
+      );
+    }
 
     // Track that this player used this drop castaway
     if (!usedDropsByPlayer.has(winner.player_id)) {
