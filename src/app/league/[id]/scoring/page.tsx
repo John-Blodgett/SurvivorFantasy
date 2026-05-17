@@ -110,12 +110,15 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   // Fetch graded challenge submissions for the scoring log
   let challengeQuery = supabase
     .from("challenge_submissions")
-    .select("id, player_id, is_correct, submitted_at, challenges!inner(league_id, title, points)")
+    .select("id, player_id, is_correct, submitted_at, challenges!inner(league_id, title, points, episodes!inner(number))")
     .eq("challenges.league_id", leagueId)
     .eq("is_correct", true);
 
   if (playerFilter) {
     challengeQuery = challengeQuery.eq("player_id", playerFilter);
+  }
+  if (episodeFilter) {
+    challengeQuery = challengeQuery.eq("challenges.episodes.number", episodeFilter);
   }
 
   const { data: challengeSubsRaw } = await challengeQuery.order("submitted_at", { ascending: true });
@@ -161,15 +164,17 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
     for (const sub of challengeSubsRaw ?? []) {
       const s = sub as Record<string, unknown>;
       const challenge = s.challenges as Record<string, unknown>;
+      const episode = challenge.episodes as Record<string, unknown>;
       const playerId = s.player_id as string;
       const points = challenge.points as number;
+      const epNumber = episode.number as number;
 
       const current = playerTotals.get(playerId) ?? 0;
       playerTotals.set(playerId, current + points);
 
       events.push({
         id: `challenge-${s.id}`,
-        episode_number: 0,
+        episode_number: epNumber,
         castaway_id: "",
         castaway_name: "",
         castaway_photo: null,
@@ -179,6 +184,22 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
         player_id: playerId,
         running_total: playerTotals.get(playerId)!,
       });
+    }
+  }
+
+  // Sort all events by episode number, then by creation order
+  events.sort((a, b) => {
+    if (a.episode_number !== b.episode_number) return a.episode_number - b.episode_number;
+    return 0; // preserve insertion order within same episode
+  });
+
+  // Recompute running totals after sorting
+  playerTotals.clear();
+  for (const event of events) {
+    if (event.player_id) {
+      const current = playerTotals.get(event.player_id) ?? 0;
+      playerTotals.set(event.player_id, current + event.points);
+      event.running_total = playerTotals.get(event.player_id)!;
     }
   }
 

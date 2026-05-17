@@ -39,7 +39,7 @@ export async function submitChallengeResponseAction(formData: FormData) {
   // Fetch the challenge and verify deadline
   const { data: challenge } = await supabase
     .from("challenges")
-    .select("id, deadline, league_id")
+    .select("id, deadline, league_id, episodes!inner(is_finalized)")
     .eq("id", challengeId)
     .single();
 
@@ -47,6 +47,15 @@ export async function submitChallengeResponseAction(formData: FormData) {
     redirect(
       `/league/${leagueId}/challenges?error=${encodeURIComponent(
         "Challenge not found."
+      )}`
+    );
+  }
+
+  const episodeData = challenge.episodes as unknown as { is_finalized: boolean } | null;
+  if (episodeData?.is_finalized) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(
+        "This episode has been finalized. No more submissions allowed."
       )}`
     );
   }

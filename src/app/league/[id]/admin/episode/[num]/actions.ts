@@ -420,6 +420,7 @@ export async function eliminateCastawaysAction(formData: FormData) {
     redirect(`${basePath}?error=${encodeURIComponent("Select at least one castaway to eliminate.")}`);
   }
 
+  // Mark selected castaways as eliminated
   for (const castawayId of castawayIds) {
     await supabase
       .from("castaways")
@@ -428,7 +429,61 @@ export async function eliminateCastawaysAction(formData: FormData) {
       .eq("league_id", leagueId);
   }
 
+  // Now finalize the episode (same logic as finalizeEpisodeAction)
+  const { data: league } = await supabase
+    .from("leagues").select("consolation_points").eq("id", leagueId).single();
+
+  const episodeId = await ensureEpisode(supabase, leagueId, episodeNumber);
+
+  const { data: eliminatedCastaways } = await supabase
+    .from("castaways")
+    .select("id, eliminated_episode")
+    .eq("league_id", leagueId)
+    .eq("is_eliminated", true)
+    .not("eliminated_episode", "is", null);
+
+  const consolationEvents = buildConsolationEvents(
+    episodeId, episodeNumber,
+    (eliminatedCastaways ?? []).map((c) => ({ castaway_id: c.id, eliminated_episode: c.eliminated_episode! })),
+    league?.consolation_points ?? 0
+  );
+
+  if (consolationEvents.length > 0) {
+    const { error } = await supabase.from("episode_events").insert(consolationEvents);
+    if (error) redirect(`${basePath}?error=${encodeURIComponent("Failed to insert consolation events.")}`);
+  }
+
+  const { error } = await supabase
+    .from("episodes")
+    .update({ is_finalized: true, finalized_at: new Date().toISOString() })
+    .eq("id", episodeId);
+
+  if (error) redirect(`${basePath}?error=${encodeURIComponent("Failed to finalize episode.")}`);
+
+  // Stamp player_id on all episode events based on current team ownership
+  const { data: assignments } = await supabase
+    .from("team_assignments")
+    .select("player_id, castaway_id")
+    .eq("league_id", leagueId);
+
+  const ownerMap = new Map((assignments ?? []).map((a) => [a.castaway_id, a.player_id]));
+
+  const { data: events } = await supabase
+    .from("episode_events")
+    .select("id, castaway_id")
+    .eq("episode_id", episodeId);
+
+  for (const event of events ?? []) {
+    const playerId = ownerMap.get(event.castaway_id);
+    if (playerId) {
+      await supabase
+        .from("episode_events")
+        .update({ player_id: playerId })
+        .eq("id", event.id);
+    }
+  }
+
   revalidatePath(basePath);
   revalidatePath(`/league/${leagueId}/admin/castaways`);
-  redirect(`${basePath}?success=eliminated`);
+  redirect(`${basePath}?success=finalized`);
 }

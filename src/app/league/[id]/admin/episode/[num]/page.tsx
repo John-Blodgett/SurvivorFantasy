@@ -274,7 +274,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
             <h2 id="elimination-heading" className="text-base font-semibold mb-3">Eliminate Castaways</h2>
             <div className="rounded-lg border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-3">
-                Select castaways eliminated in this episode. They will begin earning consolation points from the next episode.
+                Select castaways eliminated this episode, then click to finalize. This marks them as eliminated and awards consolation points to previously eliminated castaways.
               </p>
               <EliminationForm
                 leagueId={leagueId}

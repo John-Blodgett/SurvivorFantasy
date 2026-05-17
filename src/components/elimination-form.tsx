@@ -55,10 +55,10 @@ export default function EliminationForm({ leagueId, episodeNumber, castaways }: 
 
       {selected.size > 0 && (
         <SubmitButton
-          pendingText="Eliminating…"
-          className="rounded bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium hover:bg-destructive/90 transition-colors min-h-[44px] disabled:opacity-50"
+          pendingText="Finalizing & Eliminating…"
+          className="rounded bg-green-700 text-white px-4 py-2 text-sm font-medium hover:bg-green-800 transition-colors min-h-[44px] disabled:opacity-50"
         >
-          Eliminate {selected.size} castaway{selected.size !== 1 ? "s" : ""}
+          Finalize & Eliminate {selected.size} castaway{selected.size !== 1 ? "s" : ""}
         </SubmitButton>
       )}
     </form>

@@ -28,6 +28,8 @@ export default async function AdminWaiverPage({ params, searchParams }: PageProp
     .eq("id", leagueId)
     .single();
 
+  console.log("[admin/waiver] user:", user.id, "league:", league?.id, "admin_id:", league?.admin_id, "match:", league?.admin_id === user.id);
+
   if (!league || league.admin_id !== user.id) redirect("/dashboard");
 
   // Fetch all pending claims

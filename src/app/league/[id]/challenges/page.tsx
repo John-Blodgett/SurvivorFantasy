@@ -46,7 +46,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
   // Fetch all challenges for this league with episode info
   const { data: rawChallenges } = await supabase
     .from("challenges")
-    .select("*, episodes(number)")
+    .select("*, episodes(number, is_finalized)")
     .eq("league_id", leagueId)
     .order("deadline", { ascending: false });
 
@@ -57,6 +57,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
     points: c.points as number,
     deadline: c.deadline as string,
     episode_number: (c.episodes as Record<string, unknown> | null)?.number as number ?? 0,
+    is_episode_finalized: (c.episodes as Record<string, unknown> | null)?.is_finalized as boolean ?? false,
   }));
 
   // Fetch user's submissions
@@ -111,7 +112,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
           <div className="space-y-4">
             {challenges.map((challenge) => {
               const deadline = new Date(challenge.deadline);
-              const isPastDeadline = now > deadline;
+              const isPastDeadline = now > deadline || challenge.is_episode_finalized;
               const submission = submissionMap.get(challenge.id);
 
               return (
