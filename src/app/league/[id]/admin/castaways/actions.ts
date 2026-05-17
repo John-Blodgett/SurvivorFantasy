@@ -82,3 +82,63 @@ export async function restoreCastawayAction(formData: FormData) {
   revalidatePath(basePath);
   redirect(basePath);
 }
+
+export async function updateCastawayAction(formData: FormData) {
+  const leagueId = formData.get("league_id") as string;
+  const { supabase } = await requireLeagueAdmin(leagueId);
+  const basePath = `/league/${leagueId}/admin/castaways`;
+
+  const castawayId = formData.get("castaway_id") as string;
+  const name = (formData.get("name") as string | null) ?? "";
+  const tribe_id = (formData.get("tribe_id") as string | null) || null;
+  const photo_url = (formData.get("photo_url") as string | null) || null;
+
+  if (!castawayId) redirect(`${basePath}?error=Missing+castaway+ID`);
+  if (!name.trim()) redirect(`${basePath}?error=${encodeURIComponent("Name is required.")}`);
+
+  const { error } = await supabase
+    .from("castaways")
+    .update({ name: name.trim(), tribe_id, photo_url })
+    .eq("id", castawayId)
+    .eq("league_id", leagueId);
+
+  if (error) {
+    redirect(`${basePath}?error=${encodeURIComponent("Failed to update castaway.")}`);
+  }
+
+  revalidatePath(basePath);
+  redirect(`${basePath}?success=updated`);
+}
+
+export async function deleteCastawayAction(formData: FormData) {
+  const leagueId = formData.get("league_id") as string;
+  const { supabase } = await requireLeagueAdmin(leagueId);
+  const basePath = `/league/${leagueId}/admin/castaways`;
+
+  const castawayId = formData.get("castaway_id") as string;
+  if (!castawayId) redirect(`${basePath}?error=Missing+castaway+ID`);
+
+  // Check if draft has started — block deletion if so
+  const { data: draft } = await supabase
+    .from("drafts")
+    .select("status")
+    .eq("league_id", leagueId)
+    .single();
+
+  if (draft && draft.status !== "pending") {
+    redirect(`${basePath}?error=${encodeURIComponent("Cannot delete castaways after the draft has started.")}`);
+  }
+
+  const { error } = await supabase
+    .from("castaways")
+    .delete()
+    .eq("id", castawayId)
+    .eq("league_id", leagueId);
+
+  if (error) {
+    redirect(`${basePath}?error=${encodeURIComponent("Failed to delete castaway.")}`);
+  }
+
+  revalidatePath(basePath);
+  redirect(`${basePath}?success=deleted`);
+}

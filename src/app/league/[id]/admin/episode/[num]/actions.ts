@@ -401,3 +401,34 @@ export async function addBatchEventsAction(formData: FormData) {
 
   revalidatePath(basePath);
 }
+
+export async function eliminateCastawaysAction(formData: FormData) {
+  const leagueId = formData.get("league_id") as string;
+  const { supabase } = await requireLeagueAdmin(leagueId);
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const basePath = `/league/${leagueId}/admin/episode/${episodeNumber}`;
+
+  const castawayIdsRaw = formData.get("castaway_ids") as string;
+  let castawayIds: string[];
+  try {
+    castawayIds = JSON.parse(castawayIdsRaw);
+  } catch {
+    redirect(`${basePath}?error=${encodeURIComponent("Invalid elimination data.")}`);
+  }
+
+  if (!Array.isArray(castawayIds) || castawayIds.length === 0) {
+    redirect(`${basePath}?error=${encodeURIComponent("Select at least one castaway to eliminate.")}`);
+  }
+
+  for (const castawayId of castawayIds) {
+    await supabase
+      .from("castaways")
+      .update({ is_eliminated: true, eliminated_episode: episodeNumber })
+      .eq("id", castawayId)
+      .eq("league_id", leagueId);
+  }
+
+  revalidatePath(basePath);
+  revalidatePath(`/league/${leagueId}/admin/castaways`);
+  redirect(`${basePath}?success=eliminated`);
+}

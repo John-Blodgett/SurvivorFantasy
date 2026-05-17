@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import EpisodeScorerForm from "@/components/episode-scorer-form";
 import BatchScoringForm from "@/components/batch-scoring-form";
+import EliminationForm from "@/components/elimination-form";
 import { formatPacificDeadline, toPacificDatetimeLocal } from "@/lib/timezone";
 import type { Castaway } from "@/lib/castaways";
 import type { ScoringRule } from "@/lib/scoring-rules";
@@ -101,6 +102,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
   const successMessage =
     searchParams.success === "finalized" ? "Episode finalized successfully."
     : searchParams.success === "unfinalized" ? "Episode un-finalized. You can now make corrections."
+    : searchParams.success === "eliminated" ? "Castaways eliminated successfully."
     : null;
 
   return (
@@ -265,6 +267,23 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
             </div>
           )}
         </section>
+
+        {/* Elimination section — only non-eliminated castaways */}
+        {!isFinalized && (
+          <section aria-labelledby="elimination-heading">
+            <h2 id="elimination-heading" className="text-base font-semibold mb-3">Eliminate Castaways</h2>
+            <div className="rounded-lg border border-border bg-card p-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                Select castaways eliminated in this episode. They will begin earning consolation points from the next episode.
+              </p>
+              <EliminationForm
+                leagueId={leagueId}
+                episodeNumber={episodeNumber}
+                castaways={allCastaways.map((c) => ({ id: c.id as string, name: c.name as string }))}
+              />
+            </div>
+          </section>
+        )}
       </div>
     </AppShell>
   );
