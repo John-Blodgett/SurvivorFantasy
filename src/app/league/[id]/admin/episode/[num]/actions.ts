@@ -424,7 +424,7 @@ export async function eliminateCastawaysAction(formData: FormData) {
   for (const castawayId of castawayIds) {
     await supabase
       .from("castaways")
-      .update({ is_eliminated: true, eliminated_episode: episodeNumber })
+      .update({ is_eliminated: true, eliminated_episode: episodeNumber, tribe_id: null })
       .eq("id", castawayId)
       .eq("league_id", leagueId);
   }

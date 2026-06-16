@@ -49,6 +49,7 @@ export async function eliminateCastawayAction(formData: FormData) {
     .update({
       is_eliminated: true,
       eliminated_episode: episodeNumber > 0 ? episodeNumber : null,
+      tribe_id: null,
     })
     .eq("id", castawayId)
     .eq("league_id", leagueId);

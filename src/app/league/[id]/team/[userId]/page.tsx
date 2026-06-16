@@ -443,9 +443,10 @@ function CastawayBreakdownCard({
   const episodePoints = breakdown?.episode_points ?? {};
   const consolationPoints = breakdown?.consolation_points ?? 0;
 
-  // Episodes where this castaway has any points (episode events or consolation)
+  // Episodes where this castaway has any points (from assignment window OR player_id attribution)
+  const episodesWithPoints = new Set(Object.keys(episodePoints).map(Number));
   const relevantEpisodes = episodeNumbers.filter(
-    (n) => n >= assignment.points_from_episode
+    (n) => n >= assignment.points_from_episode || episodesWithPoints.has(n)
   );
 
   // Format the assignment metadata label
