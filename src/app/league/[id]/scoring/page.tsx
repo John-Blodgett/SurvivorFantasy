@@ -29,13 +29,20 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   // Fetch league info
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, admin_id")
+    .select("id, name, admin_id, consolation_points")
     .eq("id", leagueId)
     .single();
 
   if (!league) redirect("/dashboard");
 
   const isAdmin = league.admin_id === user.id;
+
+  // Fetch scoring rules for the breakdown panel
+  const { data: scoringRules } = await supabase
+    .from("scoring_rules")
+    .select("id, name, points")
+    .eq("league_id", leagueId)
+    .order("points", { ascending: false });
 
   // Parse filters from search params
   const episodeFilter = searchParams.episode ? parseInt(searchParams.episode, 10) : null;
@@ -241,6 +248,37 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
         <p className="text-sm text-muted-foreground">
           Every scoring event across finalized episodes. Filter by episode, player, or click a castaway for their breakdown.
         </p>
+
+        {/* Scoring rules breakdown */}
+        {(scoringRules ?? []).length > 0 && (
+          <details className="group rounded-lg border border-border bg-card">
+            <summary className="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-sm font-medium list-none">
+              <span>How points are earned</span>
+              <span className="text-muted-foreground text-xs group-open:hidden">Show</span>
+              <span className="text-muted-foreground text-xs hidden group-open:inline">Hide</span>
+            </summary>
+            <div className="border-t border-border px-4 py-3 space-y-3">
+              <ul className="divide-y divide-border">
+                {(scoringRules ?? []).map((rule) => (
+                  <li key={rule.id} className="flex items-center justify-between py-2 text-sm">
+                    <span className="text-foreground">{rule.name}</span>
+                    <span className={`tabular-nums font-semibold ${rule.points > 0 ? "text-green-700" : rule.points < 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                      {rule.points > 0 ? `+${rule.points}` : rule.points} pts
+                    </span>
+                  </li>
+                ))}
+                {(league.consolation_points ?? 0) > 0 && (
+                  <li className="flex items-center justify-between py-2 text-sm">
+                    <span className="text-foreground">Consolation (eliminated castaway, per episode)</span>
+                    <span className="tabular-nums font-semibold text-green-700">
+                      +{league.consolation_points} pts
+                    </span>
+                  </li>
+                )}
+              </ul>
+            </div>
+          </details>
+        )}
 
         {/* Episode filter pills */}
         {episodeNumbers.length > 0 && (
