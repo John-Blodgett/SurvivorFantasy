@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateSnakeOrder, autoPickCastaway, type DraftPreference } from "@/lib/draft";
+import { generateSnakeOrder, autoPickCastaway, orderPlayersForDraft, type DraftPreference } from "@/lib/draft";
 
 /**
  * POST /api/draft/auto-pick
@@ -89,18 +89,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "League not found" }, { status: 404 });
   }
 
-  // Load players in join order
+  // Load players in draft order
   const { data: members } = await supabase
     .from("league_members")
-    .select("player_id, joined_at")
-    .eq("league_id", leagueId)
-    .order("joined_at", { ascending: true });
+    .select("player_id, joined_at, draft_position")
+    .eq("league_id", leagueId);
 
   if (!members || members.length === 0) {
     return NextResponse.json({ error: "No players found" }, { status: 400 });
   }
 
-  const playerIds = members.map((m) => m.player_id);
+  const playerIds = orderPlayersForDraft(members);
   const snakeOrder = generateSnakeOrder(playerIds, league.roster_size);
 
   if (pickIndex >= snakeOrder.length) {

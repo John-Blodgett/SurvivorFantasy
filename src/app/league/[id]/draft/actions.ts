@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { generateSnakeOrder, autoPickCastaway, type DraftPreference } from "@/lib/draft";
+import { generateSnakeOrder, autoPickCastaway, orderPlayersForDraft, type DraftPreference } from "@/lib/draft";
 
 /**
  * Records a player's pick in the live draft.
@@ -54,19 +54,18 @@ export async function makeDraftPickAction(formData: FormData) {
     return { error: "League not found." };
   }
 
-  // Load players in join order
+  // Load players in draft order
   const { data: members } = await supabase
     .from("league_members")
-    .select("player_id, joined_at")
-    .eq("league_id", leagueId)
-    .order("joined_at", { ascending: true });
+    .select("player_id, joined_at, draft_position")
+    .eq("league_id", leagueId);
 
   if (!members || members.length === 0) {
     console.warn("[draft:pick] No players found for league", { leagueId });
     return { error: "No players found." };
   }
 
-  const playerIds = members.map((m) => m.player_id);
+  const playerIds = orderPlayersForDraft(members);
   const snakeOrder = generateSnakeOrder(playerIds, league.roster_size);
   const currentPickIndex = draft.current_pick_index;
 
@@ -245,13 +244,12 @@ export async function autoPickAction(leagueId: string) {
   // Load players
   const { data: members } = await supabase
     .from("league_members")
-    .select("player_id, joined_at")
-    .eq("league_id", leagueId)
-    .order("joined_at", { ascending: true });
+    .select("player_id, joined_at, draft_position")
+    .eq("league_id", leagueId);
 
   if (!members) return { error: "No players found." };
 
-  const playerIds = members.map((m) => m.player_id);
+  const playerIds = orderPlayersForDraft(members);
   const snakeOrder = generateSnakeOrder(playerIds, league.roster_size);
   const currentPickIndex = draft.current_pick_index;
 

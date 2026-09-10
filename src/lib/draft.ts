@@ -19,6 +19,47 @@ export interface DraftPick {
   pick_number: number; // 1-based
 }
 
+export interface DraftMember {
+  player_id: string;
+  joined_at: string;
+  draft_position: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// orderPlayersForDraft
+// ---------------------------------------------------------------------------
+
+/**
+ * Determines the base draft order (round-1 pick order) for a set of league
+ * members.
+ *
+ * Ordering rules:
+ *  - Members with an explicit `draft_position` come first, sorted ascending.
+ *  - Members without a `draft_position` (null) are sorted last, ordered by
+ *    `joined_at` ascending.
+ *  - `joined_at` breaks ties between members sharing a draft_position.
+ *
+ * Returns an array of player IDs in draft order.
+ */
+export function orderPlayersForDraft(members: DraftMember[]): string[] {
+  return [...members]
+    .sort((a, b) => {
+      const aHas = a.draft_position !== null && a.draft_position !== undefined;
+      const bHas = b.draft_position !== null && b.draft_position !== undefined;
+
+      if (aHas && bHas) {
+        if (a.draft_position !== b.draft_position) {
+          return (a.draft_position as number) - (b.draft_position as number);
+        }
+        return a.joined_at.localeCompare(b.joined_at);
+      }
+      if (aHas) return -1;
+      if (bHas) return 1;
+      return a.joined_at.localeCompare(b.joined_at);
+    })
+    .map((m) => m.player_id);
+}
+
 // ---------------------------------------------------------------------------
 // generateSnakeOrder
 // ---------------------------------------------------------------------------

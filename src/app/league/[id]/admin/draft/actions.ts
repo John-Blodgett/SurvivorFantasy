@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { runAutoDraft, type DraftPreference } from "@/lib/draft";
+import { runAutoDraft, orderPlayersForDraft, type DraftPreference } from "@/lib/draft";
 import { requireLeagueAdmin } from "../helpers";
 
 export async function configureDraftAction(formData: FormData) {
@@ -124,13 +124,12 @@ export async function runAutoDraftAction(leagueId: string) {
 
   const { data: members } = await supabase
     .from("league_members")
-    .select("player_id, joined_at")
-    .eq("league_id", leagueId)
-    .order("joined_at", { ascending: true });
+    .select("player_id, joined_at, draft_position")
+    .eq("league_id", leagueId);
 
   if (!members || members.length === 0) return { error: "No players found in this league." };
 
-  const playerIds = members.map((m) => m.player_id);
+  const playerIds = orderPlayersForDraft(members);
 
   const { data: castaways } = await supabase
     .from("castaways")
@@ -198,4 +197,64 @@ export async function runAutoDraftAction(leagueId: string) {
     .eq("id", draft.id);
 
   return { success: true, totalPicks: picks.length };
+}
+
+/**
+ * Randomizes the draft order for a league by assigning each member a
+ * random `draft_position`. Only allowed before the draft has started.
+ */
+export async function randomizeDraftOrderAction(formData: FormData) {
+  const leagueId = formData.get("league_id") as string;
+  await requireLeagueAdmin(leagueId);
+  const supabase = createClient();
+  const basePath = `/league/${leagueId}/admin/draft`;
+
+  // Block randomizing once the draft is active or complete.
+  const { data: draft } = await supabase
+    .from("drafts")
+    .select("status")
+    .eq("league_id", leagueId)
+    .single();
+
+  if (draft && draft.status !== "pending") {
+    redirect(
+      `${basePath}?error=${encodeURIComponent(
+        "You can only change the draft order before the draft starts."
+      )}`
+    );
+  }
+
+  const { data: members } = await supabase
+    .from("league_members")
+    .select("player_id")
+    .eq("league_id", leagueId);
+
+  if (!members || members.length === 0) {
+    redirect(`${basePath}?error=${encodeURIComponent("No players to randomize.")}`);
+  }
+
+  // Fisher–Yates shuffle of the player IDs.
+  const playerIds = members!.map((m) => m.player_id);
+  for (let i = playerIds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]];
+  }
+
+  // Persist positions (1-based) one row at a time.
+  for (let i = 0; i < playerIds.length; i++) {
+    const { error } = await supabase
+      .from("league_members")
+      .update({ draft_position: i + 1 })
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[i]);
+
+    if (error) {
+      redirect(
+        `${basePath}?error=${encodeURIComponent("Failed to save draft order.")}`
+      );
+    }
+  }
+
+  revalidatePath(basePath);
+  redirect(`${basePath}?success=order_randomized`);
 }

@@ -4,7 +4,8 @@ import Link from "next/link";
 import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
-import { configureDraftAction, startDraftAction } from "./actions";
+import { configureDraftAction, startDraftAction, randomizeDraftOrderAction } from "./actions";
+import { orderPlayersForDraft } from "@/lib/draft";
 
 interface PageProps {
   params: { id: string };
@@ -48,16 +49,46 @@ export default async function AdminDraftPage({ params, searchParams }: PageProps
     .eq("league_id", league.id)
     .eq("is_eliminated", false);
 
+  // Members + current draft order (for live draft order management)
+  const { data: members } = await supabase
+    .from("league_members")
+    .select("player_id, joined_at, draft_position, profiles(display_name)")
+    .eq("league_id", league.id);
+
+  const orderedPlayerIds = orderPlayersForDraft(
+    (members ?? []).map((m) => ({
+      player_id: m.player_id,
+      joined_at: m.joined_at,
+      draft_position: m.draft_position,
+    }))
+  );
+
+  const nameById = new Map(
+    (members ?? []).map((m) => {
+      const profile = m.profiles as unknown as { display_name: string } | null;
+      return [m.player_id, profile?.display_name ?? "Unknown"] as const;
+    })
+  );
+
+  const hasCustomOrder = (members ?? []).some((m) => m.draft_position !== null);
+  const orderedPlayers = orderedPlayerIds.map((id) => ({
+    id,
+    display_name: nameById.get(id) ?? "Unknown",
+  }));
+
   const draftStatus = draft?.status ?? "not_started";
   const isComplete = draftStatus === "complete";
   const isActive = draftStatus === "active";
   const canStart = !isComplete && !isActive;
+  const isLive = league.draft_mode === "live";
 
   const successMessage =
     searchParams.success === "configured"
       ? "Draft settings saved."
       : searchParams.success === "auto_complete"
       ? "Auto draft completed successfully!"
+      : searchParams.success === "order_randomized"
+      ? "Draft order randomized."
       : null;
 
   return (
@@ -198,6 +229,55 @@ export default async function AdminDraftPage({ params, searchParams }: PageProps
                   className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   Save Settings
+                </SubmitButton>
+              </form>
+            </div>
+          </section>
+        )}
+
+        {/* Draft order — live draft only, before it starts */}
+        {canStart && isLive && (
+          <section aria-labelledby="order-heading">
+            <h2 id="order-heading" className="text-base font-semibold mb-3">
+              Draft Order
+            </h2>
+            <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {hasCustomOrder
+                  ? "This is the pick order for round 1 (it snakes back the other way each round)."
+                  : "Players currently pick in the order they joined. Randomize to shuffle the order."}
+              </p>
+
+              {orderedPlayers.length > 0 ? (
+                <ol className="space-y-1.5">
+                  {orderedPlayers.map((player, index) => (
+                    <li
+                      key={player.id}
+                      className="flex items-center gap-3 rounded border border-border bg-background px-3 py-2 text-sm"
+                    >
+                      <span className="text-muted-foreground w-5 text-right shrink-0 font-medium">
+                        {index + 1}
+                      </span>
+                      <span className="font-medium truncate">
+                        {player.display_name}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No players have joined yet.
+                </p>
+              )}
+
+              <form action={randomizeDraftOrderAction}>
+                <input type="hidden" name="league_id" value={leagueId} />
+                <SubmitButton
+                  pendingText="Randomizing…"
+                  disabled={orderedPlayers.length < 2}
+                  className="rounded border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Randomize Order
                 </SubmitButton>
               </form>
             </div>

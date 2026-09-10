@@ -4,7 +4,7 @@ import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
 import DraftRoom from "@/components/draft-room";
 import DraftPreferencesForm from "@/components/draft-preferences-form";
-import { generateSnakeOrder } from "@/lib/draft";
+import { generateSnakeOrder, orderPlayersForDraft } from "@/lib/draft";
 
 interface SearchParams {
   error?: string;
@@ -68,6 +68,7 @@ export default async function DraftPage({
         <PreDraftView
           leagueId={leagueId}
           userId={user.id}
+          draftMode={league.draft_mode}
           searchParams={searchParams}
         />
       </AppShell>
@@ -77,17 +78,28 @@ export default async function DraftPage({
   // Load shared data for active + complete states
   const { data: members } = await supabase
     .from("league_members")
-    .select("player_id, joined_at, profiles(display_name)")
-    .eq("league_id", leagueId)
-    .order("joined_at", { ascending: true });
+    .select("player_id, joined_at, draft_position, profiles(display_name)")
+    .eq("league_id", leagueId);
 
-  const players = (members ?? []).map((m) => {
-    const profile = m.profiles as unknown as { display_name: string } | null;
-    return {
-      id: m.player_id,
-      display_name: profile?.display_name ?? "Unknown",
-    };
-  });
+  const orderedPlayerIds = orderPlayersForDraft(
+    (members ?? []).map((m) => ({
+      player_id: m.player_id,
+      joined_at: m.joined_at,
+      draft_position: m.draft_position,
+    }))
+  );
+
+  const memberById = new Map(
+    (members ?? []).map((m) => {
+      const profile = m.profiles as unknown as { display_name: string } | null;
+      return [m.player_id, profile?.display_name ?? "Unknown"] as const;
+    })
+  );
+
+  const players = orderedPlayerIds.map((id) => ({
+    id,
+    display_name: memberById.get(id) ?? "Unknown",
+  }));
 
   const playerIds = players.map((p) => p.id);
   const snakeOrder = generateSnakeOrder(playerIds, league.roster_size);
@@ -163,12 +175,33 @@ export default async function DraftPage({
 async function PreDraftView({
   leagueId,
   userId,
+  draftMode,
   searchParams,
 }: {
   leagueId: string;
   userId: string;
+  draftMode: string | null;
   searchParams: SearchParams;
 }) {
+  // ── LIVE DRAFT: players don't set preferences; they just wait ──
+  if (draftMode === "live") {
+    return (
+      <main className="p-4 sm:p-6 max-w-2xl mx-auto space-y-6">
+        <div className="rounded-lg border border-dashed border-border p-8 text-center space-y-3">
+          <p className="text-base font-semibold">The draft hasn&apos;t started yet</p>
+          <p className="text-sm text-muted-foreground">
+            This league is running a live draft. When the admin starts it,
+            this page will turn into the draft room where everyone picks in
+            turn.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Keep this tab open (or come back here) once the draft begins.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   const supabase = createClient();
 
   const { data: castaways } = await supabase

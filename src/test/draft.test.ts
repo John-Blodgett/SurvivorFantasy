@@ -4,7 +4,9 @@ import {
   generateSnakeOrder,
   autoPickCastaway,
   runAutoDraft,
+  orderPlayersForDraft,
   type DraftPreference,
+  type DraftMember,
 } from "@/lib/draft";
 
 // ---------------------------------------------------------------------------
@@ -221,6 +223,64 @@ describe("Property 4: Auto-pick selects highest-ranked available castaway", () =
           if (result !== null) {
             expect(draftedIds.has(result)).toBe(false);
           }
+          return true;
+        }
+      ),
+      { numRuns: 20 }
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// orderPlayersForDraft: custom draft order with fallback to join order
+// ---------------------------------------------------------------------------
+
+describe("orderPlayersForDraft", () => {
+  it("falls back to joined_at order when no draft_position is set", () => {
+    const members: DraftMember[] = [
+      { player_id: "c", joined_at: "2024-01-03T00:00:00Z", draft_position: null },
+      { player_id: "a", joined_at: "2024-01-01T00:00:00Z", draft_position: null },
+      { player_id: "b", joined_at: "2024-01-02T00:00:00Z", draft_position: null },
+    ];
+    expect(orderPlayersForDraft(members)).toEqual(["a", "b", "c"]);
+  });
+
+  it("orders by draft_position ascending when set", () => {
+    const members: DraftMember[] = [
+      { player_id: "a", joined_at: "2024-01-01T00:00:00Z", draft_position: 3 },
+      { player_id: "b", joined_at: "2024-01-02T00:00:00Z", draft_position: 1 },
+      { player_id: "c", joined_at: "2024-01-03T00:00:00Z", draft_position: 2 },
+    ];
+    expect(orderPlayersForDraft(members)).toEqual(["b", "c", "a"]);
+  });
+
+  it("sorts members with draft_position before those without", () => {
+    const members: DraftMember[] = [
+      { player_id: "a", joined_at: "2024-01-01T00:00:00Z", draft_position: null },
+      { player_id: "b", joined_at: "2024-01-02T00:00:00Z", draft_position: 1 },
+      { player_id: "c", joined_at: "2024-01-03T00:00:00Z", draft_position: null },
+    ];
+    // b (positioned) first, then a and c by joined_at
+    expect(orderPlayersForDraft(members)).toEqual(["b", "a", "c"]);
+  });
+
+  it("is a permutation of the input players (property)", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 1, max: 8 }).chain((n) =>
+          fc.uniqueArray(fc.uuid(), { minLength: n, maxLength: n })
+        ),
+        (playerIds) => {
+          const members: DraftMember[] = playerIds.map((id, i) => ({
+            player_id: id,
+            joined_at: new Date(2024, 0, 1, 0, 0, i).toISOString(),
+            // Randomly assign a position or leave null
+            draft_position: i % 2 === 0 ? i + 1 : null,
+          }));
+
+          const ordered = orderPlayersForDraft(members);
+          expect(ordered).toHaveLength(playerIds.length);
+          expect(new Set(ordered)).toEqual(new Set(playerIds));
           return true;
         }
       ),
