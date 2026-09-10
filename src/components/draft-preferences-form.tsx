@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { savePreferencesAction } from "@/app/league/[id]/preferences/actions";
 import { Loader2 } from "lucide-react";
 
@@ -20,47 +20,103 @@ export default function DraftPreferencesForm({ leagueId, castaways }: Props) {
   const [ranked, setRanked] = useState<Castaway[]>(castaways);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Refs to each <li> so we can hit-test the pointer position against rows.
+  const itemRefs = useRef<(HTMLLIElement | null)[]>([]);
+  // The index the dragged item currently hovers over.
   const dragOverIndex = useRef<number | null>(null);
+  // The index being dragged (mirrors draggingIndex but readable in listeners).
+  const dragFromIndex = useRef<number | null>(null);
 
-  function handleDragStart(index: number) {
-    setDraggingIndex(index);
+  const setItemRef = useCallback(
+    (index: number) => (el: HTMLLIElement | null) => {
+      itemRefs.current[index] = el;
+    },
+    []
+  );
+
+  /** Moves the dragged item to a new position (immutably). */
+  function reorder(from: number, to: number) {
+    setRanked((prev) => {
+      if (from === to || from < 0 || to < 0) return prev;
+      const updated = [...prev];
+      const [moved] = updated.splice(from, 1);
+      updated.splice(to, 0, moved);
+      return updated;
+    });
   }
 
-  function handleDragEnter(index: number) {
+  /** Finds the row index whose vertical center is closest to a Y coordinate. */
+  function indexAtY(clientY: number): number | null {
+    let closest: number | null = null;
+    let closestDist = Infinity;
+    itemRefs.current.forEach((el, i) => {
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const center = rect.top + rect.height / 2;
+      const dist = Math.abs(clientY - center);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = i;
+      }
+    });
+    return closest;
+  }
+
+  // ── Pointer-based drag (works for mouse AND touch) ──
+
+  function handlePointerDown(
+    e: React.PointerEvent<HTMLButtonElement>,
+    index: number
+  ) {
+    // Only respond to primary button / single touch.
+    if (e.button !== 0 && e.pointerType === "mouse") return;
+    e.preventDefault();
+
+    dragFromIndex.current = index;
     dragOverIndex.current = index;
+    setDraggingIndex(index);
+
+    // Capture the pointer so we keep receiving move/up even if the finger
+    // slides off the handle.
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
-  function handleDragEnd() {
-    if (draggingIndex === null || dragOverIndex.current === null) {
-      setDraggingIndex(null);
-      return;
+  function handlePointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    if (dragFromIndex.current === null) return;
+    e.preventDefault();
+
+    const over = indexAtY(e.clientY);
+    if (over === null || over === dragOverIndex.current) return;
+
+    const from = dragOverIndex.current;
+    if (from === null) return;
+
+    reorder(from, over);
+    dragOverIndex.current = over;
+    setDraggingIndex(over);
+  }
+
+  function handlePointerEnd(e: React.PointerEvent<HTMLButtonElement>) {
+    if (dragFromIndex.current === null) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore if capture was already released
     }
-    const from = draggingIndex;
-    const to = dragOverIndex.current;
-    if (from === to) {
-      setDraggingIndex(null);
-      return;
-    }
-    const updated = [...ranked];
-    const [moved] = updated.splice(from, 1);
-    updated.splice(to, 0, moved);
-    setRanked(updated);
-    setDraggingIndex(null);
+    dragFromIndex.current = null;
     dragOverIndex.current = null;
+    setDraggingIndex(null);
   }
 
   function moveUp(index: number) {
     if (index === 0) return;
-    const updated = [...ranked];
-    [updated[index - 1], updated[index]] = [updated[index], updated[index - 1]];
-    setRanked(updated);
+    reorder(index, index - 1);
   }
 
   function moveDown(index: number) {
     if (index === ranked.length - 1) return;
-    const updated = [...ranked];
-    [updated[index], updated[index + 1]] = [updated[index + 1], updated[index]];
-    setRanked(updated);
+    reorder(index, index + 1);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -81,14 +137,10 @@ export default function DraftPreferencesForm({ leagueId, castaways }: Props) {
         {ranked.map((castaway, index) => (
           <li
             key={castaway.id}
-            draggable
-            onDragStart={() => handleDragStart(index)}
-            onDragEnter={() => handleDragEnter(index)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => e.preventDefault()}
-            className={`flex items-center gap-3 rounded-lg border bg-card px-4 py-3 cursor-grab active:cursor-grabbing transition-opacity ${
+            ref={setItemRef(index)}
+            className={`flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-opacity ${
               draggingIndex === index
-                ? "opacity-40 border-primary"
+                ? "opacity-60 border-primary shadow-sm"
                 : "border-border"
             }`}
           >
@@ -97,13 +149,18 @@ export default function DraftPreferencesForm({ leagueId, castaways }: Props) {
               {index + 1}
             </span>
 
-            {/* Drag handle */}
-            <span
-              className="text-muted-foreground shrink-0 select-none"
-              aria-hidden="true"
+            {/* Drag handle — pointer events work for mouse + touch */}
+            <button
+              type="button"
+              onPointerDown={(e) => handlePointerDown(e, index)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerEnd}
+              onPointerCancel={handlePointerEnd}
+              aria-label={`Drag to reorder ${castaway.name}`}
+              className="text-muted-foreground shrink-0 select-none cursor-grab active:cursor-grabbing touch-none px-1 py-2 -my-2 leading-none"
             >
               ⠿
-            </span>
+            </button>
 
             {/* Photo */}
             <div className="w-9 h-9 rounded-full overflow-hidden bg-muted shrink-0 flex items-center justify-center">
@@ -126,7 +183,7 @@ export default function DraftPreferencesForm({ leagueId, castaways }: Props) {
               <p className="text-sm font-medium truncate">{castaway.name}</p>
             </div>
 
-            {/* Up/down buttons for accessibility */}
+            {/* Up/down buttons for accessibility + fallback */}
             <div className="flex gap-1 shrink-0">
               <button
                 type="button"
