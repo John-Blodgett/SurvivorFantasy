@@ -21,7 +21,7 @@ export async function acceptTradeAction(formData: FormData) {
 
   const { data: trade } = await supabase
     .from("trades")
-    .select("id, league_id, proposer_id, receiver_id, proposer_castaway, receiver_castaway, status")
+    .select("id, league_id, receiver_id, status")
     .eq("id", tradeId)
     .single();
 
@@ -35,50 +35,16 @@ export async function acceptTradeAction(formData: FormData) {
 
   const leagueId = trade.league_id;
 
-  // Determine points_from_episode for the new assignments
-  const { data: latestEpisode } = await supabase
-    .from("episodes")
-    .select("number")
-    .eq("league_id", leagueId)
-    .eq("is_finalized", true)
-    .order("number", { ascending: false })
-    .limit(1)
-    .single();
+  // Accept the trade via a SECURITY DEFINER RPC.
+  // Validates ownership/eligibility and marks trade as 'accepted'.
+  // The assignment swap happens later when the admin approves.
+  const { data: acceptResult, error: acceptError } = await supabase
+    .rpc("accept_trade", { p_trade_id: tradeId });
 
-  const pointsFromEpisode = (latestEpisode?.number ?? 0) + 1;
-
-  // Mark trade as completed
-  const { error: updateError } = await supabase
-    .from("trades")
-    .update({ status: "admin_approved", resolved_at: new Date().toISOString() })
-    .eq("id", tradeId);
-
-  if (updateError) {
-    redirect("/dashboard?error=Failed+to+complete+trade");
+  if (acceptError || acceptResult?.error) {
+    const msg = acceptError?.message ?? acceptResult?.error ?? "Failed to accept trade";
+    redirect(`/dashboard?error=${encodeURIComponent(msg)}`);
   }
-
-  // Swap team assignments
-  await supabase.from("team_assignments").delete()
-    .eq("league_id", leagueId).eq("castaway_id", trade.proposer_castaway);
-  await supabase.from("team_assignments").delete()
-    .eq("league_id", leagueId).eq("castaway_id", trade.receiver_castaway);
-
-  await supabase.from("team_assignments").insert([
-    {
-      league_id: leagueId,
-      player_id: trade.receiver_id,
-      castaway_id: trade.proposer_castaway,
-      points_from_episode: pointsFromEpisode,
-      source: "trade" as const,
-    },
-    {
-      league_id: leagueId,
-      player_id: trade.proposer_id,
-      castaway_id: trade.receiver_castaway,
-      points_from_episode: pointsFromEpisode,
-      source: "trade" as const,
-    },
-  ]);
 
   revalidatePath("/dashboard");
   revalidatePath(`/league/${leagueId}/leaderboard`);

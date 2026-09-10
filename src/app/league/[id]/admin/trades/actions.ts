@@ -14,7 +14,7 @@ export async function approveTradeAction(formData: FormData) {
 
   const { data: trade } = await supabase
     .from("trades")
-    .select("id, league_id, proposer_id, receiver_id, proposer_castaway, receiver_castaway, status")
+    .select("id, status")
     .eq("id", tradeId)
     .eq("league_id", leagueId)
     .single();
@@ -24,45 +24,17 @@ export async function approveTradeAction(formData: FormData) {
     redirect(`${basePath}?error=Trade+must+be+accepted+before+admin+approval`);
   }
 
-  const { data: latestEpisode } = await supabase
-    .from("episodes")
-    .select("number")
-    .eq("league_id", leagueId)
-    .eq("is_finalized", true)
-    .order("number", { ascending: false })
-    .limit(1)
-    .single();
+  // Execute the assignment swap via SECURITY DEFINER RPC.
+  // This handles the status update to 'admin_approved', deletes old
+  // assignments, and inserts the swapped ones — bypassing the RLS chain
+  // on team_assignments that can silently block admin DELETE operations.
+  const { data: swapResult, error: swapError } = await supabase
+    .rpc("execute_trade_swap", { p_trade_id: tradeId });
 
-  const pointsFromEpisode = (latestEpisode?.number ?? 0) + 1;
-
-  const { error: tradeError } = await supabase
-    .from("trades")
-    .update({ status: "admin_approved", resolved_at: new Date().toISOString() })
-    .eq("id", tradeId);
-
-  if (tradeError) redirect(`${basePath}?error=Failed+to+approve+trade`);
-
-  await supabase.from("team_assignments").delete()
-    .eq("league_id", leagueId).eq("castaway_id", trade.proposer_castaway);
-  await supabase.from("team_assignments").delete()
-    .eq("league_id", leagueId).eq("castaway_id", trade.receiver_castaway);
-
-  await supabase.from("team_assignments").insert([
-    {
-      league_id: leagueId,
-      player_id: trade.receiver_id,
-      castaway_id: trade.proposer_castaway,
-      points_from_episode: pointsFromEpisode,
-      source: "trade" as const,
-    },
-    {
-      league_id: leagueId,
-      player_id: trade.proposer_id,
-      castaway_id: trade.receiver_castaway,
-      points_from_episode: pointsFromEpisode,
-      source: "trade" as const,
-    },
-  ]);
+  if (swapError || swapResult?.error) {
+    const msg = swapError?.message ?? swapResult?.error ?? "Failed to approve trade";
+    redirect(`${basePath}?error=${encodeURIComponent(msg)}`);
+  }
 
   revalidatePath(basePath);
   revalidatePath(`/league/${leagueId}/leaderboard`);
