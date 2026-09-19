@@ -4,7 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { buildConsolationEvents } from "@/lib/episodes";
-import { validateCreateChallenge } from "@/lib/challenges";
+import {
+  validateChallengeConfig,
+  validateCreateChallenge,
+  normalizeChallengeType,
+  normalizeDropdownScope,
+  normalizeOptions,
+  type CastawayOption,
+} from "@/lib/challenges";
 import { buildTribeEvents } from "@/lib/tribes";
 import { buildBatchEvents } from "@/lib/scoring";
 import { toPacificISO } from "@/lib/timezone";
@@ -186,6 +193,33 @@ export async function unfinalizeEpisodeAction(formData: FormData) {
   redirect(`${basePath}?success=unfinalized`);
 }
 
+/**
+ * Reads multiple-choice option strings from FormData. Supports either a single
+ * JSON-encoded array in an `options` field, or repeated `options`/`options[]`
+ * fields. Returns the raw (untrimmed) strings so the pure lib layer can
+ * normalize and validate them.
+ */
+function readOptionsFromFormData(formData: FormData): string[] {
+  const raw = formData.get("options");
+  if (typeof raw === "string" && raw.trim() !== "") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((o) => (typeof o === "string" ? o : String(o)));
+      }
+    } catch {
+      // Not JSON — fall through to treat repeated fields below.
+    }
+  }
+
+  const repeated = [
+    ...formData.getAll("options"),
+    ...formData.getAll("options[]"),
+  ].filter((v): v is string => typeof v === "string");
+
+  return repeated;
+}
+
 export async function createChallengeAction(formData: FormData) {
   const leagueId = formData.get("league_id") as string;
   const { supabase } = await requireLeagueAdmin(leagueId);
@@ -197,15 +231,72 @@ export async function createChallengeAction(formData: FormData) {
   const points = parseInt(formData.get("points") as string, 10);
   const deadline = formData.get("deadline") as string;
 
-  const validation = validateCreateChallenge({ title, description, points, deadline });
+  // Type-specific fields (all optional; absent => free_response, Req 1.2).
+  const challengeTypeRaw = (formData.get("challenge_type") as string | null) ?? undefined;
+  const dropdownScopeRaw = (formData.get("dropdown_scope") as string | null) ?? undefined;
+  const correctAnswerRaw = formData.get("correct_answer") as string | null;
+  const rawOptions = readOptionsFromFormData(formData);
+
+  // Fetch league castaways — needed to validate a dropdown correct answer
+  // against its scope (Req 3.8).
+  const { data: castawayRows } = await supabase
+    .from("castaways")
+    .select("id, name, is_eliminated")
+    .eq("league_id", leagueId);
+  const castaways: CastawayOption[] = (castawayRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    is_eliminated: c.is_eliminated,
+  }));
+
+  // Validate the full typed configuration (Req 1.3, 1.4, 2.x, 3.x). This also
+  // runs the shared title/points/deadline checks via validateCreateChallenge.
+  const validation = validateChallengeConfig(
+    {
+      title,
+      description,
+      points,
+      deadline,
+      challengeType: challengeTypeRaw,
+      options: rawOptions,
+      dropdownScope: dropdownScopeRaw,
+      correctAnswer: correctAnswerRaw,
+    },
+    castaways
+  );
   if (!validation.valid) redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
+
+  // Normalize the type-specific columns for storage.
+  const type = normalizeChallengeType(challengeTypeRaw);
+  let options: string[] | null = null;
+  let dropdownScope: string | null = null;
+  let correctAnswer: string | null = null;
+
+  if (type === "multiple_choice") {
+    options = normalizeOptions(rawOptions);
+    const trimmedCorrect = correctAnswerRaw?.trim();
+    correctAnswer = trimmedCorrect ? trimmedCorrect : null;
+  } else if (type === "survivor_dropdown") {
+    dropdownScope = normalizeDropdownScope(dropdownScopeRaw);
+    const trimmedCorrect = correctAnswerRaw?.trim();
+    correctAnswer = trimmedCorrect ? trimmedCorrect : null;
+  }
+  // free_response stores nulls for options/dropdown_scope/correct_answer.
 
   const episodeId = await ensureEpisode(supabase, leagueId, episodeNumber);
   const deadlinePacific = toPacificISO(deadline);
 
   const { error } = await supabase.from("challenges").insert({
-    league_id: leagueId, episode_id: episodeId,
-    title: title.trim(), description: description?.trim() || null, points, deadline: deadlinePacific,
+    league_id: leagueId,
+    episode_id: episodeId,
+    title: title.trim(),
+    description: description?.trim() || null,
+    points,
+    deadline: deadlinePacific,
+    challenge_type: type,
+    options,
+    dropdown_scope: dropdownScope,
+    correct_answer: correctAnswer,
   });
 
   if (error) redirect(`${basePath}?error=${encodeURIComponent("Failed to create challenge.")}`);
@@ -224,11 +315,25 @@ export async function updateChallengeAction(formData: FormData) {
   const points = parseInt(formData.get("points") as string, 10);
   const deadline = formData.get("deadline") as string;
 
-  const validation = validateCreateChallenge({ title, description, points, deadline });
-  if (!validation.valid) redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
+  // Whether this edit submitted the challenge-type selector at all. Forms that
+  // only edit title/points/deadline (e.g. the inline Edit popover) omit it —
+  // in that case we must PRESERVE the challenge's existing type configuration
+  // rather than resetting it to free_response.
+  const hasTypeFields = formData.has("challenge_type");
 
+  const challengeTypeRaw = (formData.get("challenge_type") as string | null) ?? undefined;
+  const dropdownScopeRaw = (formData.get("dropdown_scope") as string | null) ?? undefined;
+  const correctAnswerRaw = formData.get("correct_answer") as string | null;
+  const rawOptions = readOptionsFromFormData(formData);
+
+  // Load the challenge first so the deadline guard can leave the row unchanged
+  // when the deadline has passed (Req 9.5). Also load the existing type columns
+  // so an edit that omits the type fields preserves them.
   const { data: challenge } = await supabase
-    .from("challenges").select("id, deadline, league_id").eq("id", challengeId).single();
+    .from("challenges")
+    .select("id, deadline, league_id, challenge_type, options, dropdown_scope, correct_answer")
+    .eq("id", challengeId)
+    .single();
 
   if (!challenge || challenge.league_id !== leagueId) {
     redirect(`${basePath}?error=${encodeURIComponent("Challenge not found.")}`);
@@ -237,10 +342,76 @@ export async function updateChallengeAction(formData: FormData) {
     redirect(`${basePath}?error=${encodeURIComponent("Cannot edit a challenge after its deadline.")}`);
   }
 
+  // Fetch league castaways — needed to validate a dropdown correct answer
+  // against its scope when converting to survivor_dropdown (Req 3.8, 9.2).
+  const { data: castawayRows } = await supabase
+    .from("castaways")
+    .select("id, name, is_eliminated")
+    .eq("league_id", leagueId);
+  const castaways: CastawayOption[] = (castawayRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    is_eliminated: c.is_eliminated,
+  }));
+
+  let type: string;
+  let options: string[] | null = null;
+  let dropdownScope: string | null = null;
+  let correctAnswer: string | null = null;
+
+  if (hasTypeFields) {
+    // The form carried the type selector, so validate + persist the (possibly
+    // converted) configuration exactly like create (Req 9.1, 9.2, 9.3).
+    const validation = validateChallengeConfig(
+      {
+        title,
+        description,
+        points,
+        deadline,
+        challengeType: challengeTypeRaw,
+        options: rawOptions,
+        dropdownScope: dropdownScopeRaw,
+        correctAnswer: correctAnswerRaw,
+      },
+      castaways
+    );
+    if (!validation.valid) redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
+
+    type = normalizeChallengeType(challengeTypeRaw);
+    if (type === "multiple_choice") {
+      options = normalizeOptions(rawOptions);
+      const trimmedCorrect = correctAnswerRaw?.trim();
+      correctAnswer = trimmedCorrect ? trimmedCorrect : null;
+    } else if (type === "survivor_dropdown") {
+      dropdownScope = normalizeDropdownScope(dropdownScopeRaw);
+      const trimmedCorrect = correctAnswerRaw?.trim();
+      correctAnswer = trimmedCorrect ? trimmedCorrect : null;
+    }
+    // free_response stores nulls for options/dropdown_scope/correct_answer.
+  } else {
+    // The form only edited title/points/deadline — validate those shared
+    // fields but PRESERVE the existing type configuration unchanged so a
+    // simple points/title edit does not wipe the challenge type (Req 9.6).
+    const validation = validateCreateChallenge({ title, description, points, deadline });
+    if (!validation.valid) redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
+
+    type = normalizeChallengeType(challenge.challenge_type);
+    options = (challenge.options as string[] | null) ?? null;
+    dropdownScope = challenge.dropdown_scope ?? null;
+    correctAnswer = challenge.correct_answer ?? null;
+  }
+
   const deadlinePacific = toPacificISO(deadline);
 
   const { error } = await supabase.from("challenges").update({
-    title: title.trim(), description: description?.trim() || null, points, deadline: deadlinePacific,
+    title: title.trim(),
+    description: description?.trim() || null,
+    points,
+    deadline: deadlinePacific,
+    challenge_type: type,
+    options,
+    dropdown_scope: dropdownScope,
+    correct_answer: correctAnswer,
   }).eq("id", challengeId);
 
   if (error) redirect(`${basePath}?error=${encodeURIComponent("Failed to update challenge.")}`);

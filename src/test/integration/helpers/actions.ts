@@ -11,6 +11,15 @@ import { getAdminClient } from "./supabase";
 import { generateSnakeOrder, autoPickCastaway, type DraftPreference } from "@/lib/draft";
 import { processWaiverClaims, type WaiverClaim } from "@/lib/waiver";
 import { buildConsolationEvents } from "@/lib/episodes";
+import {
+  validateChallengeConfig,
+  validateTypedSubmission,
+  autoGrade,
+  normalizeChallengeType,
+  normalizeDropdownScope,
+  normalizeOptions,
+  type CastawayOption,
+} from "@/lib/challenges";
 
 // ---------------------------------------------------------------------------
 // Draft Actions
@@ -1009,30 +1018,99 @@ export async function processWaivers(
 // ---------------------------------------------------------------------------
 
 /**
+ * Optional typed-challenge parameters accepted by `createChallenge` and
+ * `updateChallenge`. Mirror the type-specific FormData fields read by
+ * createChallengeAction / updateChallengeAction so integration tests can
+ * persist the new columns (challenge_type, options, dropdown_scope,
+ * correct_answer).
+ */
+export interface TypedChallengeParams {
+  /** Raw challenge type; omission/blank implies free_response (Req 1.2). */
+  challengeType?: string;
+  /** Raw multiple-choice option strings (multiple_choice only). */
+  options?: string[];
+  /** Raw dropdown scope: "all" | "active_only" (survivor_dropdown only). */
+  dropdownScope?: string;
+  /** MC option text or castaway id (multiple_choice / survivor_dropdown). */
+  correctAnswer?: string | null;
+}
+
+/**
+ * Fetches the league's castaways as CastawayOption records for use by the
+ * pure lib validators (validateChallengeConfig / validateTypedSubmission).
+ */
+async function fetchCastawayOptions(
+  supabase: ReturnType<typeof getAdminClient>,
+  leagueId: string
+): Promise<CastawayOption[]> {
+  const { data: castaways } = await supabase
+    .from("castaways")
+    .select("id, name, is_eliminated")
+    .eq("league_id", leagueId);
+
+  return (castaways ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    is_eliminated: c.is_eliminated,
+  }));
+}
+
+/**
  * Creates a challenge for a given episode.
- * Validates title, points, and deadline.
+ *
+ * Validates title, points, and deadline plus the optional typed configuration
+ * (challenge type, multiple-choice options, dropdown scope, correct answer)
+ * via the pure `validateChallengeConfig`, mirroring createChallengeAction.
+ * On success, normalizes and persists the new columns; a free_response
+ * challenge stores null for options/dropdown_scope/correct_answer.
  */
 export async function createChallenge(
   leagueId: string,
   episodeId: string,
   title: string,
   points: number,
-  deadline: string
+  deadline: string,
+  typed?: TypedChallengeParams
 ): Promise<{ challengeId?: string; error?: string }> {
-  // Validate inputs
-  if (!title || !title.trim()) {
-    return { error: "Challenge title is required." };
-  }
-
-  if (!points || points <= 0) {
-    return { error: "Points must be a positive number." };
-  }
-
-  if (!deadline) {
-    return { error: "Deadline is required." };
-  }
-
   const supabase = getAdminClient();
+
+  // Fetch castaways so a dropdown correct-answer can be validated against scope.
+  const castaways = await fetchCastawayOptions(supabase, leagueId);
+
+  const validation = validateChallengeConfig(
+    {
+      title,
+      description: "",
+      points,
+      deadline,
+      challengeType: typed?.challengeType,
+      options: typed?.options,
+      dropdownScope: typed?.dropdownScope,
+      correctAnswer: typed?.correctAnswer,
+    },
+    castaways
+  );
+
+  if (!validation.valid) {
+    return { error: validation.error };
+  }
+
+  // Normalize the type-specific columns (Req 1.2, 2.5, 3.2, 9.6).
+  const challengeType = normalizeChallengeType(typed?.challengeType);
+  const options =
+    challengeType === "multiple_choice"
+      ? normalizeOptions(typed?.options ?? [])
+      : null;
+  const dropdownScope =
+    challengeType === "survivor_dropdown"
+      ? normalizeDropdownScope(typed?.dropdownScope)
+      : null;
+  const correctAnswer =
+    challengeType === "free_response"
+      ? null
+      : typed?.correctAnswer && typed.correctAnswer.trim() !== ""
+        ? typed.correctAnswer.trim()
+        : null;
 
   const { data: challenge, error } = await supabase
     .from("challenges")
@@ -1042,6 +1120,10 @@ export async function createChallenge(
       title: title.trim(),
       points,
       deadline,
+      challenge_type: challengeType,
+      options,
+      dropdown_scope: dropdownScope,
+      correct_answer: correctAnswer,
     })
     .select("id")
     .single();
@@ -1054,8 +1136,104 @@ export async function createChallenge(
 }
 
 /**
+ * Updates an existing challenge, mirroring updateChallengeAction.
+ *
+ * Enforces the deadline guard (Req 9.5): a challenge whose deadline has passed
+ * cannot be edited and its stored columns are left unchanged. Otherwise the
+ * new configuration is validated with `validateChallengeConfig` and the
+ * type/options/scope/correct_answer columns are updated (supports converting a
+ * challenge to survivor_dropdown per Req 9.1–9.3).
+ */
+export async function updateChallenge(
+  challengeId: string,
+  patch: {
+    title?: string;
+    points?: number;
+    deadline?: string;
+  } & TypedChallengeParams
+): Promise<{ error?: string }> {
+  const supabase = getAdminClient();
+
+  // Load the existing challenge.
+  const { data: challenge } = await supabase
+    .from("challenges")
+    .select("id, league_id, title, points, deadline")
+    .eq("id", challengeId)
+    .single();
+
+  if (!challenge) return { error: "Challenge not found." };
+
+  // Deadline guard: cannot edit after the deadline (Req 9.5).
+  if (new Date(challenge.deadline) < new Date()) {
+    return { error: "Cannot edit a challenge after its deadline." };
+  }
+
+  const title = patch.title ?? challenge.title;
+  const points = patch.points ?? challenge.points;
+  const deadline = patch.deadline ?? challenge.deadline;
+
+  const castaways = await fetchCastawayOptions(supabase, challenge.league_id);
+
+  const validation = validateChallengeConfig(
+    {
+      title,
+      description: "",
+      points,
+      deadline,
+      challengeType: patch.challengeType,
+      options: patch.options,
+      dropdownScope: patch.dropdownScope,
+      correctAnswer: patch.correctAnswer,
+    },
+    castaways
+  );
+
+  if (!validation.valid) {
+    return { error: validation.error };
+  }
+
+  const challengeType = normalizeChallengeType(patch.challengeType);
+  const options =
+    challengeType === "multiple_choice"
+      ? normalizeOptions(patch.options ?? [])
+      : null;
+  const dropdownScope =
+    challengeType === "survivor_dropdown"
+      ? normalizeDropdownScope(patch.dropdownScope)
+      : null;
+  const correctAnswer =
+    challengeType === "free_response"
+      ? null
+      : patch.correctAnswer && patch.correctAnswer.trim() !== ""
+        ? patch.correctAnswer.trim()
+        : null;
+
+  const { error } = await supabase
+    .from("challenges")
+    .update({
+      title: title.trim(),
+      points,
+      deadline,
+      challenge_type: challengeType,
+      options,
+      dropdown_scope: dropdownScope,
+      correct_answer: correctAnswer,
+    })
+    .eq("id", challengeId);
+
+  if (error) return { error: `Failed to update challenge: ${error.message}` };
+
+  return {};
+}
+
+/**
  * Submits a response to a challenge.
- * Validates deadline hasn't passed and player hasn't already submitted.
+ *
+ * Validates the deadline and duplicate-submission guards, then runs the pure
+ * `validateTypedSubmission` (per the challenge's type/options/scope + live
+ * castaways) and `autoGrade`, mirroring submitChallengeResponseAction. Stores
+ * the normalized `{ response: value, is_correct }` where `is_correct` is set
+ * by auto-grade when a correct answer exists, else null.
  */
 export async function submitChallengeResponse(
   challengeId: string,
@@ -1064,10 +1242,12 @@ export async function submitChallengeResponse(
 ): Promise<{ submissionId?: string; error?: string }> {
   const supabase = getAdminClient();
 
-  // Get challenge and check deadline
+  // Get challenge (type/options/scope/correct_answer) and check deadline.
   const { data: challenge } = await supabase
     .from("challenges")
-    .select("id, deadline")
+    .select(
+      "id, league_id, deadline, challenge_type, options, dropdown_scope, correct_answer"
+    )
     .eq("id", challengeId)
     .single();
 
@@ -1092,13 +1272,47 @@ export async function submitChallengeResponse(
     return { error: "You have already submitted a response to this challenge." };
   }
 
-  // Insert submission
+  // Resolve the challenge type; fetch castaways only for dropdowns.
+  const type = normalizeChallengeType(challenge.challenge_type);
+  const castaways =
+    type === "survivor_dropdown"
+      ? await fetchCastawayOptions(supabase, challenge.league_id)
+      : [];
+
+  const scope =
+    challenge.dropdown_scope !== null && challenge.dropdown_scope !== undefined
+      ? normalizeDropdownScope(challenge.dropdown_scope)
+      : null;
+
+  // Validate the submission against the challenge type (Req 5.1–5.3, 6.5).
+  const validation = validateTypedSubmission({
+    type,
+    rawResponse: response,
+    options: (challenge.options as string[] | null) ?? null,
+    scope,
+    castaways,
+  });
+
+  if (!validation.valid) {
+    return { error: validation.error };
+  }
+
+  const value = validation.value!;
+
+  // Auto-grade when a correct answer is defined (Req 7.1–7.3, 7.6).
+  const { is_correct } = autoGrade({
+    submittedValue: value,
+    correctAnswer: challenge.correct_answer,
+  });
+
+  // Insert submission with normalized value and auto-grade result.
   const { data: submission, error } = await supabase
     .from("challenge_submissions")
     .insert({
       challenge_id: challengeId,
       player_id: playerId,
-      response: response.trim(),
+      response: value,
+      is_correct,
     })
     .select("id")
     .single();

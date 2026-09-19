@@ -3,9 +3,23 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { validateChallengeSubmission, validateEditResponse } from "@/lib/challenges";
+import {
+  validateChallengeSubmission,
+  validateEditResponse,
+  validateTypedSubmission,
+  autoGrade,
+  normalizeChallengeType,
+  normalizeDropdownScope,
+  type CastawayOption,
+  type ChallengeType,
+} from "@/lib/challenges";
 
-/** Submit a response to a weekly challenge. Requirements: 9.2, 9.3 */
+/**
+ * Submit a response to a weekly challenge.
+ * Validates the response against the challenge type, auto-grades against any
+ * stored correct answer, and stores the normalized value.
+ * Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.5, 7.1, 7.2, 7.3, 7.6, 10.1, 10.2, 10.3, 10.4
+ */
 export async function submitChallengeResponseAction(formData: FormData) {
   const supabase = createClient();
   const {
@@ -18,10 +32,10 @@ export async function submitChallengeResponseAction(formData: FormData) {
   const challengeId = formData.get("challenge_id") as string;
   const response = formData.get("response") as string;
 
-  if (!challengeId || !response?.trim()) {
+  if (!challengeId) {
     redirect(
       `/league/${leagueId}/challenges?error=${encodeURIComponent(
-        "Response is required."
+        "Challenge not found."
       )}`
     );
   }
@@ -36,10 +50,12 @@ export async function submitChallengeResponseAction(formData: FormData) {
 
   if (!membership) redirect("/dashboard");
 
-  // Fetch the challenge and verify deadline
+  // Fetch the challenge (including type config) and verify deadline
   const { data: challenge } = await supabase
     .from("challenges")
-    .select("id, deadline, league_id, episodes!inner(is_finalized)")
+    .select(
+      "id, deadline, league_id, challenge_type, options, dropdown_scope, correct_answer, episodes!inner(is_finalized)"
+    )
     .eq("id", challengeId)
     .single();
 
@@ -86,10 +102,52 @@ export async function submitChallengeResponseAction(formData: FormData) {
     );
   }
 
+  // Resolve the challenge type; null/absent => free_response (Req 8.1).
+  const type: ChallengeType = normalizeChallengeType(challenge.challenge_type);
+
+  // For survivor dropdowns, fetch the league's castaways to validate the
+  // selected id against the challenge's scope (Req 5.3).
+  let castaways: CastawayOption[] = [];
+  if (type === "survivor_dropdown") {
+    const { data: castawayRows } = await supabase
+      .from("castaways")
+      .select("id, name, is_eliminated")
+      .eq("league_id", leagueId);
+    castaways = (castawayRows ?? []) as CastawayOption[];
+  }
+
+  // Validate the response against the challenge type (Req 5.1–5.4, 6.1–6.3, 6.5).
+  const submissionValidation = validateTypedSubmission({
+    type,
+    rawResponse: response ?? "",
+    options: challenge.options as string[] | null,
+    scope: type === "survivor_dropdown"
+      ? normalizeDropdownScope(challenge.dropdown_scope)
+      : null,
+    castaways,
+  });
+
+  if (!submissionValidation.valid) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(
+        submissionValidation.error!
+      )}`
+    );
+  }
+
+  const value = submissionValidation.value!;
+
+  // Auto-grade against any stored correct answer (Req 7.1, 7.2, 7.3, 7.6).
+  const { is_correct } = autoGrade({
+    submittedValue: value,
+    correctAnswer: challenge.correct_answer,
+  });
+
   const { error } = await supabase.from("challenge_submissions").insert({
     challenge_id: challengeId,
     player_id: user.id,
-    response: response.trim(),
+    response: value,
+    is_correct,
   });
 
   if (error) {
@@ -103,7 +161,12 @@ export async function submitChallengeResponseAction(formData: FormData) {
   revalidatePath(`/league/${leagueId}/challenges`);
 }
 
-/** Edit/resubmit a challenge response before the deadline. */
+/**
+ * Edit/resubmit a challenge response before the deadline.
+ * Blocked once the submission is graded. Re-runs typed validation and
+ * auto-grade, updating both the normalized response value and is_correct.
+ * Requirements: 5.1, 5.2, 5.3, 6.1, 7.1, 7.2, 9.5
+ */
 export async function editChallengeResponseAction(formData: FormData) {
   const supabase = createClient();
   const {
@@ -124,10 +187,12 @@ export async function editChallengeResponseAction(formData: FormData) {
     );
   }
 
-  // Fetch the submission and its challenge (for deadline)
+  // Fetch the submission and its challenge (deadline + type config).
   const { data: submission } = await supabase
     .from("challenge_submissions")
-    .select("id, player_id, is_correct, challenge_id, challenges(deadline)")
+    .select(
+      "id, player_id, is_correct, challenge_id, challenges(deadline, league_id, challenge_type, options, dropdown_scope, correct_answer)"
+    )
     .eq("id", submissionId)
     .single();
 
@@ -139,8 +204,15 @@ export async function editChallengeResponseAction(formData: FormData) {
     );
   }
 
-  const challengeData = submission.challenges as unknown as { deadline: string } | null;
-  if (!challengeData) {
+  const challengeData = submission.challenges as unknown as {
+    deadline: string;
+    league_id: string;
+    challenge_type: string | null;
+    options: string[] | null;
+    dropdown_scope: string | null;
+    correct_answer: string | null;
+  } | null;
+  if (!challengeData || challengeData.league_id !== leagueId) {
     redirect(
       `/league/${leagueId}/challenges?error=${encodeURIComponent(
         "Challenge not found."
@@ -148,6 +220,8 @@ export async function editChallengeResponseAction(formData: FormData) {
     );
   }
 
+  // Enforce deadline + the rule that a graded submission cannot be edited
+  // (existing behavior — validateEditResponse handles is_correct !== null).
   const validation = validateEditResponse({
     response: response ?? "",
     deadline: challengeData.deadline,
@@ -160,9 +234,51 @@ export async function editChallengeResponseAction(formData: FormData) {
     );
   }
 
+  // Resolve the challenge type; null/absent => free_response (Req 8.1).
+  const type: ChallengeType = normalizeChallengeType(challengeData.challenge_type);
+
+  // For survivor dropdowns, fetch the league's castaways to validate the
+  // selected id against the challenge's scope (Req 5.3).
+  let castaways: CastawayOption[] = [];
+  if (type === "survivor_dropdown") {
+    const { data: castawayRows } = await supabase
+      .from("castaways")
+      .select("id, name, is_eliminated")
+      .eq("league_id", leagueId);
+    castaways = (castawayRows ?? []) as CastawayOption[];
+  }
+
+  // Re-run typed validation against the challenge type (Req 5.1–5.3, 6.1).
+  const submissionValidation = validateTypedSubmission({
+    type,
+    rawResponse: response ?? "",
+    options: challengeData.options,
+    scope:
+      type === "survivor_dropdown"
+        ? normalizeDropdownScope(challengeData.dropdown_scope)
+        : null,
+    castaways,
+  });
+
+  if (!submissionValidation.valid) {
+    redirect(
+      `/league/${leagueId}/challenges?error=${encodeURIComponent(
+        submissionValidation.error!
+      )}`
+    );
+  }
+
+  const value = submissionValidation.value!;
+
+  // Re-run auto-grade against any stored correct answer (Req 7.1, 7.2).
+  const { is_correct } = autoGrade({
+    submittedValue: value,
+    correctAnswer: challengeData.correct_answer,
+  });
+
   const { error } = await supabase
     .from("challenge_submissions")
-    .update({ response: response.trim() })
+    .update({ response: value, is_correct })
     .eq("id", submissionId);
 
   if (error) {

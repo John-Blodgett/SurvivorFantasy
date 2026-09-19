@@ -6,6 +6,14 @@ import SubmitButton from "@/components/submit-button";
 import EditChallengeResponse from "@/components/edit-challenge-response";
 import { submitChallengeResponseAction } from "./actions";
 import { formatPacificDeadline } from "@/lib/timezone";
+import {
+  normalizeChallengeType,
+  normalizeDropdownScope,
+  resolveDropdownOptions,
+  resolveDropdownDisplay,
+  type ChallengeType,
+  type CastawayOption,
+} from "@/lib/challenges";
 
 interface PageProps {
   params: { id: string };
@@ -56,8 +64,25 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
     description: c.description as string | null,
     points: c.points as number,
     deadline: c.deadline as string,
+    challenge_type: normalizeChallengeType(c.challenge_type as string | null | undefined),
+    options: (c.options as string[] | null) ?? null,
+    dropdown_scope: c.dropdown_scope as string | null | undefined,
     episode_number: (c.episodes as Record<string, unknown> | null)?.number as number ?? 0,
     is_episode_finalized: (c.episodes as Record<string, unknown> | null)?.is_finalized as boolean ?? false,
+  }));
+
+  // Fetch league castaways (for survivor-dropdown challenges). The option list
+  // is derived from live castaway state at render time (Req 4.6).
+  const { data: rawCastaways } = await supabase
+    .from("castaways")
+    .select("id, name, is_eliminated")
+    .eq("league_id", leagueId)
+    .order("name", { ascending: true });
+
+  const castaways: CastawayOption[] = (rawCastaways ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    is_eliminated: (c.is_eliminated as boolean) ?? false,
   }));
 
   // Fetch user's submissions
@@ -115,6 +140,25 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
               const isPastDeadline = now > deadline || challenge.is_episode_finalized;
               const submission = submissionMap.get(challenge.id);
 
+              const type: ChallengeType = challenge.challenge_type;
+
+              // For survivor-dropdown challenges, resolve the option list from
+              // live castaway state (Req 4.4–4.6).
+              const dropdownScope = normalizeDropdownScope(challenge.dropdown_scope);
+              const dropdownOptions =
+                type === "survivor_dropdown"
+                  ? resolveDropdownOptions(dropdownScope, castaways)
+                  : [];
+
+              // Display an existing submission: for dropdowns, resolve the
+              // stored castaway id to a name, falling back to the raw value
+              // when it no longer resolves (Req 6.4, 6.6).
+              const submissionDisplay = submission
+                ? type === "survivor_dropdown"
+                  ? resolveDropdownDisplay(submission.response, castaways)
+                  : submission.response
+                : "";
+
               return (
                 <div
                   key={challenge.id}
@@ -152,7 +196,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                       <p className="text-xs font-medium text-muted-foreground mb-1">
                         Your submission:
                       </p>
-                      <p className="text-sm">{submission.response}</p>
+                      <p className="text-sm">{submissionDisplay}</p>
                       {submission.is_correct === true && (
                         <p className="text-xs text-green-700 font-medium mt-1">
                           ✓ Correct — {challenge.points} pts awarded
@@ -178,33 +222,111 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                       )}
                     </div>
                   ) : !isPastDeadline ? (
-                    <form
-                      action={submitChallengeResponseAction}
-                      className="border-t border-border pt-3 space-y-2"
-                    >
-                      <input type="hidden" name="league_id" value={leagueId} />
-                      <input type="hidden" name="challenge_id" value={challenge.id} />
-                      <label
-                        htmlFor={`response-${challenge.id}`}
-                        className="text-xs font-medium"
+                    // Suppress the input when a multiple-choice challenge has
+                    // fewer than two options (Req 4.3).
+                    type === "multiple_choice" &&
+                    (challenge.options?.length ?? 0) < 2 ? (
+                      <p
+                        role="alert"
+                        className="text-xs text-destructive border-t border-border pt-3"
                       >
-                        Your response
-                      </label>
-                      <textarea
-                        id={`response-${challenge.id}`}
-                        name="response"
-                        required
-                        rows={2}
-                        className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
-                        placeholder="Enter your answer..."
-                      />
-                      <SubmitButton
-                        pendingText="Submitting…"
-                        className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50"
+                        This challenge is not answerable.
+                      </p>
+                    ) : // Suppress the input when a survivor-dropdown resolves to
+                    // zero eligible castaways (Req 4.7).
+                    type === "survivor_dropdown" && dropdownOptions.length === 0 ? (
+                      <p
+                        role="alert"
+                        className="text-xs text-destructive border-t border-border pt-3"
                       >
-                        Submit
-                      </SubmitButton>
-                    </form>
+                        No eligible options are available.
+                      </p>
+                    ) : (
+                      <form
+                        action={submitChallengeResponseAction}
+                        className="border-t border-border pt-3 space-y-2"
+                      >
+                        <input type="hidden" name="league_id" value={leagueId} />
+                        <input type="hidden" name="challenge_id" value={challenge.id} />
+
+                        {type === "multiple_choice" ? (
+                          <fieldset className="space-y-2">
+                            <legend className="text-xs font-medium">
+                              Your response
+                            </legend>
+                            {(challenge.options ?? []).map((option, index) => {
+                              const optionId = `response-${challenge.id}-${index}`;
+                              return (
+                                <div key={optionId} className="flex items-center gap-2">
+                                  <input
+                                    type="radio"
+                                    id={optionId}
+                                    name="response"
+                                    value={option}
+                                    required
+                                    className="h-4 w-4 border-input text-primary focus:ring-primary"
+                                  />
+                                  <label htmlFor={optionId} className="text-sm">
+                                    {option}
+                                  </label>
+                                </div>
+                              );
+                            })}
+                          </fieldset>
+                        ) : type === "survivor_dropdown" ? (
+                          <>
+                            <label
+                              htmlFor={`response-${challenge.id}`}
+                              className="text-xs font-medium"
+                            >
+                              Your response
+                            </label>
+                            <select
+                              id={`response-${challenge.id}`}
+                              name="response"
+                              required
+                              defaultValue=""
+                              className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                              aria-label="Select a castaway"
+                            >
+                              <option value="" disabled>
+                                Select a castaway…
+                              </option>
+                              {dropdownOptions.map((castaway) => (
+                                <option key={castaway.id} value={castaway.id}>
+                                  {castaway.name}
+                                </option>
+                              ))}
+                            </select>
+                          </>
+                        ) : (
+                          <>
+                            <label
+                              htmlFor={`response-${challenge.id}`}
+                              className="text-xs font-medium"
+                            >
+                              Your response
+                            </label>
+                            <textarea
+                              id={`response-${challenge.id}`}
+                              name="response"
+                              required
+                              rows={2}
+                              maxLength={500}
+                              className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
+                              placeholder="Enter your answer..."
+                            />
+                          </>
+                        )}
+
+                        <SubmitButton
+                          pendingText="Submitting…"
+                          className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50"
+                        >
+                          Submit
+                        </SubmitButton>
+                      </form>
+                    )
                   ) : (
                     <p className="text-xs text-muted-foreground border-t border-border pt-2">
                       You did not submit a response before the deadline.

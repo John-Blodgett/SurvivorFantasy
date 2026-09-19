@@ -16,7 +16,13 @@ import {
 import EpisodeScorerForm from "@/components/episode-scorer-form";
 import BatchScoringForm from "@/components/batch-scoring-form";
 import EliminationForm from "@/components/elimination-form";
+import ChallengeTypeFields, { type CastawayChoice } from "./challenge-type-fields";
 import { formatPacificDeadline, toPacificDatetimeLocal } from "@/lib/timezone";
+import {
+  normalizeChallengeType,
+  resolveDropdownDisplay,
+  type CastawayOption,
+} from "@/lib/challenges";
 import type { Castaway } from "@/lib/castaways";
 import type { ScoringRule } from "@/lib/scoring-rules";
 import type { EpisodeEvent } from "@/lib/episodes";
@@ -50,6 +56,16 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
 
   const { data: activeCastaways } = await supabase
     .from("castaways").select("*, tribes(name)").eq("league_id", leagueId).eq("is_eliminated", false).order("name");
+
+  // All league castaways (including eliminated) power the survivor-dropdown
+  // correct-answer selector in the challenge creation form.
+  const { data: allCastawaysData } = await supabase
+    .from("castaways").select("id, name, is_eliminated").eq("league_id", leagueId).order("name");
+  const challengeCastaways: CastawayChoice[] = (allCastawaysData ?? []).map((c) => ({
+    id: c.id as string,
+    name: c.name as string,
+    is_eliminated: (c.is_eliminated as boolean) ?? false,
+  }));
 
   const { data: rules } = await supabase
     .from("scoring_rules").select("*").eq("league_id", leagueId).order("name");
@@ -246,6 +262,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
                   <input id="challenge-deadline" name="deadline" type="datetime-local" required className="mt-1 w-full rounded border border-input bg-background px-3 py-2 text-sm" />
                 </div>
               </div>
+              <ChallengeTypeFields castaways={challengeCastaways} idPrefix="new-challenge" />
               <SubmitButton pendingText="Creating…" className="rounded bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50">
                 Create Challenge
               </SubmitButton>
@@ -261,7 +278,8 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
                 const submissions = challengeSubmissions.filter((s) => s.challenge_id === challenge.id);
                 return (
                   <ChallengeCard key={challenge.id} challenge={challenge} isPastDeadline={isPastDeadline}
-                    submissions={submissions} leagueId={leagueId} episodeNumber={episodeNumber} />
+                    submissions={submissions} leagueId={leagueId} episodeNumber={episodeNumber}
+                    castaways={challengeCastaways} />
                 );
               })}
             </div>
@@ -321,12 +339,18 @@ function EventRow({
 }
 
 function ChallengeCard({
-  challenge, isPastDeadline, submissions, leagueId, episodeNumber,
+  challenge, isPastDeadline, submissions, leagueId, episodeNumber, castaways,
 }: {
   challenge: Challenge; isPastDeadline: boolean;
   submissions: Array<ChallengeSubmission & { player_name: string }>;
   leagueId: string; episodeNumber: number;
+  castaways: CastawayOption[];
 }) {
+  // For survivor-dropdown challenges, submissions store a castaway id; resolve
+  // it to a display name (falling back to the raw value) so admins grading the
+  // challenge see the castaway name instead of a UUID.
+  const isDropdown =
+    normalizeChallengeType(challenge.challenge_type) === "survivor_dropdown";
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -353,6 +377,14 @@ function ChallengeCard({
                     <input name="points" type="number" min="1" defaultValue={challenge.points} required className="w-full rounded border border-input bg-background px-2 py-1 text-sm" />
                     <input name="deadline" type="datetime-local" defaultValue={toPacificDatetimeLocal(challenge.deadline)} required className="w-full rounded border border-input bg-background px-2 py-1 text-sm" />
                   </div>
+                  <ChallengeTypeFields
+                    castaways={castaways}
+                    idPrefix={`edit-${challenge.id}`}
+                    initialType={normalizeChallengeType(challenge.challenge_type)}
+                    initialOptions={challenge.options ?? undefined}
+                    initialDropdownScope={challenge.dropdown_scope ?? "active_only"}
+                    initialCorrectAnswer={challenge.correct_answer ?? ""}
+                  />
                   <SubmitButton pendingText="Saving…" className="rounded bg-primary text-primary-foreground px-3 py-1 text-xs font-medium disabled:opacity-50">Save</SubmitButton>
                 </form>
               </div>
@@ -375,7 +407,11 @@ function ChallengeCard({
               <li key={sub.id} className="flex items-center gap-3 rounded border border-border px-3 py-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{sub.player_name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{sub.response}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {isDropdown
+                      ? resolveDropdownDisplay(sub.response, castaways)
+                      : sub.response}
+                  </p>
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <form action={gradeChallengeSubmissionAction}>
