@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
 
   // Protect authenticated routes
   // /join/* is handled inside the page itself (redirects to login with ?next=)
-  const publicPaths = ["/", "/register", "/auth/callback"];
+  const publicPaths = ["/", "/register", "/auth/callback", "/auth/reset-password"];
   const isPublic =
     publicPaths.some((p) => pathname === p) ||
     pathname.startsWith("/join/");

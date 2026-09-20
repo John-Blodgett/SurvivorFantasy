@@ -44,7 +44,28 @@ export default function AppShell({
                 ←
               </Link>
             )}
-            <h1 className="text-lg font-semibold truncate">{title}</h1>
+            {(() => {
+              // Titles are often "League Name — Page" (or with a hyphen).
+              // On small screens a single line truncates ("Survivor 51 - Leade…").
+              // Split into a small muted league label above the page title so
+              // nothing gets cut off. Falls back to a single line when there's
+              // no separator.
+              const match = title.match(/^(.*?)\s+[—–-]\s+(.*)$/);
+              if (match) {
+                const [, leaguePart, pagePart] = match;
+                return (
+                  <div className="min-w-0 leading-tight">
+                    <span className="block text-xs text-muted-foreground truncate">
+                      {leaguePart}
+                    </span>
+                    <h1 className="text-base sm:text-lg font-semibold truncate">
+                      {pagePart}
+                    </h1>
+                  </div>
+                );
+              }
+              return <h1 className="text-lg font-semibold truncate">{title}</h1>;
+            })()}
             {badge && (
               <span className="text-xs font-medium rounded px-2 py-0.5 bg-green-100 text-green-800 shrink-0">
                 {badge}

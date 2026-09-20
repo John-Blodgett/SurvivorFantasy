@@ -57,7 +57,15 @@ export default async function DashboardPage({
     <div className="min-h-screen bg-background">
       <header className="border-b border-border px-4 py-3 flex items-center justify-between">
         <h1 className="text-lg font-semibold">Fantasy Survivor</h1>
-        <LogoutButton />
+        <div className="flex items-center gap-2">
+          <Link
+            href="/profile"
+            className="rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted transition-colors min-h-[44px] flex items-center"
+          >
+            Profile
+          </Link>
+          <LogoutButton />
+        </div>
       </header>
       <main className="p-6 max-w-4xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
