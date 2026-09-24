@@ -518,7 +518,7 @@ describe("Integration: Edge Cases", () => {
   // BUG: Waiver processing does not verify drop castaway ownership at processing time — Req 8.5
   // ---------------------------------------------------------------------------
 
-  it.fails("BUG: should invalidate waiver claim when drop castaway was traded away before processing — Req 8.5", async () => {
+  it("should invalidate waiver claim when drop castaway was traded away before processing — Req 8.5", async () => {
     const admin = getAdminClient();
 
     // Clean up pending claims
@@ -613,4 +613,212 @@ describe("Integration: Edge Cases", () => {
       expect(claimResult.status).not.toBe("won");
     }
   });
+});
+
+// ---------------------------------------------------------------------------
+// Waiver drop-castaway ownership at processing time (BUG-002)
+//
+// Rule under test: a pending waiver claim is only valid if the claimant still
+// owns the drop castaway at PROCESSING time. If they don't (because they
+// traded/dropped it after submitting), the claim must be marked "lost", never
+// "won".
+//
+// These tests intentionally use a fresh seed + auto draft so each player has a
+// known, stable roster, then drive the exact multi-claim scenario from the
+// product discussion:
+//   John: drop Rob -> add Maggie ($5)
+//   John: drop Rob -> add Susan ($3)
+// Maggie is prioritized (higher bid). If John wins Maggie he no longer owns
+// Rob, so the Susan claim must lose.
+//
+// NOTE: The "both claims drop Rob" case is ALSO covered today by the
+// usedDropsByPlayer guard in processWaiverClaims, so that assertion would pass
+// even without the ownership fix. The second test isolates the ownership rule
+// specifically by using DIFFERENT drop castaways, so it can only pass once
+// processing re-verifies current ownership.
+//
+// Marked it.fails() until BUG-002 is fixed (see KNOWN_BUGS.md).
+// ---------------------------------------------------------------------------
+
+describe("Integration: Waiver drop ownership at processing time (BUG-002)", () => {
+  let leagueId: string;
+  let playerIds: string[];
+  let castawayIds: string[];
+
+  beforeAll(async () => {
+    await cleanup();
+    const result = await seed();
+    leagueId = result.leagueId;
+    playerIds = result.playerIds;
+    castawayIds = result.castawayIds;
+    // Give every player a roster so drops are real ownership.
+    await startAutoDraft(leagueId);
+  });
+
+  afterAll(async () => {
+    await cleanup();
+  });
+
+  /**
+   * Returns two distinct non-eliminated castaways currently owned by the given
+   * player, and a list of unassigned non-eliminated castaways usable as waiver
+   * targets. Skips (returns undefined) if the roster can't support the case.
+   */
+  async function rosterFor(playerId: string) {
+    const admin = getAdminClient();
+
+    const { data: owned } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerId);
+
+    const ownedNonElim: string[] = [];
+    for (const a of owned ?? []) {
+      const { data: c } = await admin
+        .from("castaways")
+        .select("is_eliminated")
+        .eq("id", a.castaway_id)
+        .single();
+      if (c && !c.is_eliminated) ownedNonElim.push(a.castaway_id);
+    }
+
+    const { data: allAssignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId);
+    const assignedIds = new Set((allAssignments ?? []).map((a) => a.castaway_id));
+
+    const targets: string[] = [];
+    for (const cid of castawayIds) {
+      if (assignedIds.has(cid)) continue;
+      const { data: c } = await admin
+        .from("castaways")
+        .select("is_eliminated")
+        .eq("id", cid)
+        .single();
+      if (c && !c.is_eliminated) targets.push(cid);
+    }
+
+    return { ownedNonElim, targets };
+  }
+
+  // The faithful "John" scenario: both claims drop the same castaway (Rob).
+  // Maggie ($5) wins; the Susan claim ($3) must lose because Rob is gone.
+  // This already works via the usedDropsByPlayer guard (not the ownership
+  // re-check), so it's a passing test documenting correct current behavior.
+  it(
+    "winning a claim consumes the drop castaway so a second claim dropping the same castaway loses — Req 8.5",
+    async () => {
+      const admin = getAdminClient();
+      await admin.from("waiver_claims").delete().eq("league_id", leagueId);
+
+      const john = playerIds[0];
+      const { ownedNonElim, targets } = await rosterFor(john);
+      if (ownedNonElim.length < 1 || targets.length < 2) return;
+
+      const rob = ownedNonElim[0];
+      const maggie = targets[0]; // higher bid target
+      const susan = targets[1]; // lower bid target
+
+      const maggieClaim = await submitWaiverClaim(leagueId, john, maggie, rob, 5);
+      expect(maggieClaim.error).toBeUndefined();
+
+      const susanClaim = await submitWaiverClaim(leagueId, john, susan, rob, 3);
+      expect(susanClaim.error).toBeUndefined();
+
+      await processWaivers(leagueId);
+
+      const { data: maggieRow } = await admin
+        .from("waiver_claims")
+        .select("status")
+        .eq("id", maggieClaim.claimId!)
+        .single();
+      const { data: susanRow } = await admin
+        .from("waiver_claims")
+        .select("status")
+        .eq("id", susanClaim.claimId!)
+        .single();
+
+      // Higher bid wins Maggie; Rob is now gone so Susan cannot be won.
+      expect(maggieRow!.status).toBe("won");
+      expect(susanRow!.status).toBe("lost");
+    }
+  );
+
+  // Isolating test: DIFFERENT drop castaways, so the usedDropsByPlayer guard
+  // does NOT apply. The only reason the second claim should lose is that John
+  // no longer owns its drop castaway after trading it away. Passes once
+  // processing re-verifies current ownership (the BUG-002 fix).
+  it(
+    "a claim whose drop castaway is no longer owned at processing time must lose — Req 8.5",
+    async () => {
+      const admin = getAdminClient();
+      await admin.from("waiver_claims").delete().eq("league_id", leagueId);
+
+      const john = playerIds[0];
+      const { ownedNonElim, targets } = await rosterFor(john);
+      // Need two distinct owned castaways (Rob + Steve) and two targets.
+      if (ownedNonElim.length < 2 || targets.length < 2) return;
+
+      const rob = ownedNonElim[0];
+      const steve = ownedNonElim[1];
+      const maggie = targets[0];
+      const susan = targets[1];
+
+      // Claim A: drop Rob -> Maggie ($5) — will win.
+      const maggieClaim = await submitWaiverClaim(leagueId, john, maggie, rob, 5);
+      expect(maggieClaim.error).toBeUndefined();
+
+      // Claim B: drop Steve -> Susan ($3) — different drop, so the used-drop
+      // guard does NOT cover it.
+      const susanClaim = await submitWaiverClaim(leagueId, john, susan, steve, 3);
+      expect(susanClaim.error).toBeUndefined();
+
+      // After submitting, John trades Steve away, so he no longer owns the
+      // drop castaway for Claim B by processing time.
+      const { data: p2Owned } = await admin
+        .from("team_assignments")
+        .select("castaway_id")
+        .eq("league_id", leagueId)
+        .eq("player_id", playerIds[1]);
+
+      let p2Castaway: string | undefined;
+      for (const a of p2Owned ?? []) {
+        const { data: c } = await admin
+          .from("castaways")
+          .select("is_eliminated")
+          .eq("id", a.castaway_id)
+          .single();
+        if (c && !c.is_eliminated) {
+          p2Castaway = a.castaway_id;
+          break;
+        }
+      }
+      if (!p2Castaway) return;
+
+      const trade = await proposeTrade(leagueId, john, playerIds[1], steve, p2Castaway);
+      expect(trade.error).toBeUndefined();
+      const accept = await acceptTrade(trade.tradeId!, playerIds[1]);
+      expect(accept.error).toBeUndefined();
+
+      await processWaivers(leagueId);
+
+      const { data: maggieRow } = await admin
+        .from("waiver_claims")
+        .select("status")
+        .eq("id", maggieClaim.claimId!)
+        .single();
+      const { data: susanRow } = await admin
+        .from("waiver_claims")
+        .select("status")
+        .eq("id", susanClaim.claimId!)
+        .single();
+
+      // Claim A still wins (John owns Rob at processing time).
+      expect(maggieRow!.status).toBe("won");
+      // Claim B must lose: its drop castaway (Steve) is no longer owned.
+      expect(susanRow!.status).toBe("lost");
+    }
+  );
 });

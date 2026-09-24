@@ -163,13 +163,18 @@ export function validateWaiverClaim(
  * @param nextEpisodeNumber - The episode number to set as points_from_episode for new assignments
  * @param playerBudgets - Map of player_id to their remaining budget (optional; if not provided, budget is not enforced)
  * @param randomTiebreak - Function to pick a winner index from tied claims (for testability)
+ * @param currentOwnership - Map of player_id to the set of castaway_ids they currently own at
+ *   processing time (optional). When provided, any claim whose `drop_castaway_id` is not currently
+ *   owned by the claimant is marked "lost" — the player can't drop a castaway they no longer have
+ *   (e.g. it was traded/dropped after the claim was submitted). Req 8.5.
  */
 export function processWaiverClaims(
   claims: WaiverClaim[],
   nextEpisodeNumber: number,
   playerBudgets?: Map<string, number>,
   randomTiebreak: (count: number) => number = (count) =>
-    Math.floor(Math.random() * count)
+    Math.floor(Math.random() * count),
+  currentOwnership?: Map<string, Set<string>>
 ): WaiverProcessingResult {
   if (claims.length === 0) {
     return { results: [], newAssignments: [] };
@@ -207,6 +212,14 @@ export function processWaiverClaims(
     const eligibleClaims = groupClaims.filter((c) => {
       const usedDrops = usedDropsByPlayer.get(c.player_id);
       if (usedDrops?.has(c.drop_castaway_id)) return false;
+
+      // Ownership check: the claimant must still own the drop castaway at
+      // processing time. If they traded/dropped it after submitting, the
+      // claim is invalid (Req 8.5).
+      if (currentOwnership) {
+        const owned = currentOwnership.get(c.player_id);
+        if (!owned || !owned.has(c.drop_castaway_id)) return false;
+      }
 
       // Budget check: skip if player can't afford this bid
       if (playerBudgets && budgetRemaining.has(c.player_id)) {

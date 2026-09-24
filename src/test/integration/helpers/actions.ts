@@ -954,8 +954,28 @@ export async function processWaivers(
 
   const nextEpisodeNumber = (episodes?.[0]?.number ?? 0) + 1;
 
+  // Build current ownership map at processing time so claims whose drop
+  // castaway is no longer owned are invalidated (Req 8.5, BUG-002).
+  const { data: currentAssignments } = await supabase
+    .from("team_assignments")
+    .select("player_id, castaway_id")
+    .eq("league_id", leagueId);
+
+  const currentOwnership = new Map<string, Set<string>>();
+  for (const a of currentAssignments ?? []) {
+    const owned = currentOwnership.get(a.player_id) ?? new Set<string>();
+    owned.add(a.castaway_id);
+    currentOwnership.set(a.player_id, owned);
+  }
+
   // Process claims using pure logic
-  const result = processWaiverClaims(pendingClaims, nextEpisodeNumber);
+  const result = processWaiverClaims(
+    pendingClaims,
+    nextEpisodeNumber,
+    undefined,
+    undefined,
+    currentOwnership
+  );
 
   // Apply results to database
   for (const claimResult of result.results) {

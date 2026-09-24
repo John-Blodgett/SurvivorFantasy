@@ -4,114 +4,34 @@ Prioritized list of planned work. Each item can be turned into a full spec via K
 
 ---
 
-## 1. BUG: Trade not reflecting on leaderboard (SPEC CREATED)
+## Active Work
 
-**Type:** Bugfix
-**Priority:** P0 (broken existing functionality)
-**Spec:** `.kiro/specs/trade-leaderboard-bug/`
-**Status:** Requirements done, ready for implementation
-
-**Problem:** After a trade is accepted, the leaderboard still shows the old roster. The trade shows correctly in transactions.
-
-**Root Cause:** The three trade acceptance server actions (`acceptTradeInLeagueAction`, `acceptTradeAction`, `approveTradeAction`) update `team_assignments` correctly but don't call `revalidatePath` for the leaderboard page. Next.js serves stale cached data.
-
-**Fix:** Add `revalidatePath(`/league/${leagueId}/leaderboard`)` to all three trade acceptance actions. Also revalidate `/league/${leagueId}/team` for good measure.
-
-**Files to change:**
-- `src/app/league/[id]/trades/actions.ts` (acceptTradeInLeagueAction)
-- `src/app/dashboard/trade-actions.ts` (acceptTradeAction)
-- `src/app/league/[id]/admin/trades/actions.ts` (approveTradeAction)
-
----
-
-## 2. Challenge edit/resubmit
+## 6. Admin draft controls (pause / undo / manual pick)
 
 **Type:** Feature
-**Priority:** P2
+**Priority:** P1 (mitigates the draft race condition, gives admins recovery tools)
 
-**Description:** Players should be able to edit and resubmit their challenge responses before the deadline. Currently once submitted, responses are locked.
+**Description:** Give league admins live control over an in-progress draft so they can recover from bugs or real-world interruptions (like the Sept 2026 premature auto-pick that gave John no chance to pick — see KNOWN_BUGS BUG-003).
 
 **Scope:**
-- Add an "Edit Response" button on the challenge submission UI
-- Allow updating `challenge_submissions.response` if `deadline > now()` and `is_correct IS NULL` (not yet graded)
-- Server action: `editChallengeResponseAction`
-- Validation: cannot edit after deadline, cannot edit after grading
+- **Pause / resume draft:** Admin can pause the draft, which freezes the pick timer for everyone. While paused, no auto-picks fire. Resume restarts the current pick's timer cleanly (new `pick_started_at`).
+- **Undo last pick:** Admin can roll back the most recent pick — deletes the `draft_picks` row and matching `team_assignments` row, decrements `drafts.current_pick_index`, and resets `pick_started_at` for the reopened turn. Broadcast the reverted state to all clients.
+- **Manual pick for another player:** Admin can select a castaway on behalf of the player whose turn it is (or force-assign for a specific pick), useful when someone is disconnected or a bug skipped them.
+- All actions should broadcast via the existing realtime channel so open draft rooms update immediately.
+- Guard against undo/pause after the draft is `complete` (or allow undo of the final pick to reopen it — decide during spec).
 
 **Files likely affected:**
-- `src/app/league/[id]/challenges/actions.ts` (new action)
-- `src/app/league/[id]/challenges/page.tsx` (UI for edit button)
-- `src/lib/challenges.ts` (validation logic)
+- New migration: allow `drafts.status = 'paused'` (extend the status check constraint)
+- `src/app/league/[id]/draft/actions.ts` (new actions: `pauseDraftAction`, `resumeDraftAction`, `undoLastPickAction`, `adminPickForPlayerAction`)
+- `src/components/draft-room.tsx` (admin control UI + handle `paused` status in timer/auto-pick effects)
+- `src/lib/draft.ts` (any pure helpers for undo/index math)
+- Tests in `src/test/` for the index/undo logic and `src/test/integration/` for the DB operations
+
+**Related:** Fixing BUG-003 (KNOWN_BUGS) should ideally land alongside or before this, since these controls are the manual recovery path for that class of issue.
 
 ---
 
-## 3. Waiver page redesign
-
-**Type:** Feature
-**Priority:** P2
-
-**Description:** The waiver page should show all available players (the waiver pool) in a clean grid/list. Clicking a player opens a bid form. Current UX is unclear.
-
-**Scope:**
-- Display all waiver-eligible castaways (non-eliminated, unassigned) in a card grid
-- Each card shows castaway name, tribe, photo
-- Clicking a card opens a modal/drawer with: bid amount input, drop castaway selector, submit button
-- Show player's remaining budget prominently
-- Show pending claims with ability to cancel/reorder
-
-**Files likely affected:**
-- `src/app/league/[id]/waiver/page.tsx` (complete redesign)
-- `src/app/league/[id]/waiver/actions.ts` (may need adjustments)
-- New component: `src/components/waiver-pool-card.tsx`
-- New component: `src/components/waiver-bid-modal.tsx`
-
----
-
-## 4. Tribe management (creatable/selectable tribes)
-
-**Type:** Feature
-**Priority:** P1
-
-**Description:** Tribes should be first-class entities that admins create and manage. When adding a castaway, the admin selects from existing tribes (not free-text). Scoring can then be done by tribe (e.g., "Winning tribe gets +3 for all members").
-
-**Scope:**
-- New `tribes` table: `id, league_id, name, color (optional), created_at`
-- Change `castaways.tribe` from text to `tribe_id uuid REFERENCES tribes(id)`
-- Admin UI to create/edit/delete tribes
-- Castaway form: dropdown selector for tribe instead of free-text input
-- Scoring: ability to add events for all castaways in a tribe at once
-- Migration to convert existing text tribes to tribe records
-
-**Files likely affected:**
-- New migration: `tribes` table + FK on castaways
-- `src/app/league/[id]/admin/castaways/page.tsx` (tribe selector)
-- New page: `src/app/league/[id]/admin/tribes/page.tsx`
-- `src/app/league/[id]/admin/episode/[num]/page.tsx` (tribe-based scoring)
-- `src/lib/castaways.ts` (updated types)
-
----
-
-## 5. Batch episode scoring
-
-**Type:** Feature
-**Priority:** P1
-
-**Description:** On the scoring page, admins should be able to select multiple castaways AND multiple scoring rules at once, then submit all combinations as events in one action. Currently you add events one at a time.
-
-**Scope:**
-- Multi-select UI for castaways (checkboxes or chip selection)
-- Multi-select UI for scoring rules
-- "Add Events" button creates N×M events (each selected castaway × each selected rule)
-- Preview of what will be created before submission
-- Single server action that inserts all events in one batch
-
-**Files likely affected:**
-- `src/app/league/[id]/admin/episode/[num]/page.tsx` (major UI rework)
-- `src/app/league/[id]/admin/episode/[num]/actions.ts` (new batch action)
-- New component: `src/components/batch-scoring-form.tsx`
-
----
-
-## 6. Tests for all of the above
+## 7. Tests for all of the above
 
 **Type:** Testing
 **Priority:** Alongside each feature
@@ -123,10 +43,30 @@ Each feature/bugfix above should include:
 
 ---
 
+## Shipped
+
+These items were completed and verified in the codebase (audited 2026-09-24).
+
+### Trade not reflecting on leaderboard (was #1, P0 bug)
+All three trade acceptance actions (`acceptTradeInLeagueAction`, `acceptTradeAction`, `approveTradeAction`) now call `revalidatePath` for the leaderboard and team pages. Fixed.
+
+### Challenge edit/resubmit (was #2, P2)
+Superseded and expanded by the **configurable-challenge-types** spec (`.kiro/specs/configurable-challenge-types/`), which shipped free-response, multiple-choice, and survivor-dropdown types plus auto-grading. Edit/resubmit is implemented via `validateEditResponse` (`src/lib/challenges.ts`) and `editChallengeResponseAction` (`src/app/league/[id]/challenges/actions.ts`). Only optional property-test tasks remain unchecked in that spec.
+
+### Waiver page redesign (was #3, P2)
+Implemented via `src/components/waiver-pool-grid.tsx` and `src/components/waiver-pending-claims.tsx`, wired into `src/app/league/[id]/waiver/page.tsx` (available-players grid + pending claims).
+
+### Tribe management (was #4, P1)
+`tribes` table + `castaways.tribe_id` FK shipped; `src/lib/tribes.ts`, admin tribes page, and tribe-based scoring (`addTribeEventAction` + `buildTribeEvents`) all in place.
+
+### Batch episode scoring (was #5, P1)
+`addBatchEventsAction` + `buildBatchEvents` create the N×M events from the episode admin page.
+
+---
+
 ## Implementation Order (Recommended)
 
-1. **Trade/leaderboard bug** — Quick fix, unblocks testing other features
-2. **Tribe management** — Foundation for tribe-based scoring
-3. **Batch episode scoring** — Depends on tribes being entities
-4. **Waiver page redesign** — Independent, can be done anytime
-5. **Challenge edit/resubmit** — Independent, lowest priority
+1. **Draft race condition (KNOWN_BUGS BUG-003)** — Prevents unfair auto-picks; foundational for the draft-controls work below
+2. **Admin draft controls (#6)** — Manual recovery path for the above
+
+_(Waiver ownership re-check, KNOWN_BUGS BUG-002, was fixed 2026-09-24.)_
