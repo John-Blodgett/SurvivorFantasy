@@ -194,13 +194,13 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
     }
   }
 
-  // Sort all events by episode number, then by creation order
+  // Sort all events by episode number ascending to compute running totals correctly
   events.sort((a, b) => {
     if (a.episode_number !== b.episode_number) return a.episode_number - b.episode_number;
     return 0; // preserve insertion order within same episode
   });
 
-  // Recompute running totals after sorting
+  // Recompute running totals after sorting (ascending order required for accuracy)
   playerTotals.clear();
   for (const event of events) {
     if (event.player_id) {
@@ -209,6 +209,9 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       event.running_total = playerTotals.get(event.player_id)!;
     }
   }
+
+  // Reverse so most recent events appear at the top
+  events.reverse();
 
   // Build filter URL helper
   function filterUrl(overrides: { episode?: string | null; player?: string | null; castaway?: string | null; show?: string | null }) {
