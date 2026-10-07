@@ -136,9 +136,9 @@ export default async function TransactionsPage({ params }: PageProps) {
     });
   }
 
-  // Sort oldest first (most recent at the bottom)
+  // Sort most recent first
   transactions.sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
   const typeLabel: Record<Transaction["type"], string> = {
@@ -162,7 +162,7 @@ export default async function TransactionsPage({ params }: PageProps) {
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
         <p className="text-sm text-muted-foreground">
-          All roster moves in chronological order.
+          All roster moves, most recent first.
         </p>
 
         {transactions.length === 0 ? (
