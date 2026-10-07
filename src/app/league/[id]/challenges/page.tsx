@@ -218,6 +218,9 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                           leagueId={leagueId}
                           submissionId={submission.id}
                           currentResponse={submission.response}
+                          challengeType={type}
+                          options={challenge.options}
+                          dropdownOptions={dropdownOptions}
                         />
                       )}
                     </div>
