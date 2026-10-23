@@ -3,6 +3,7 @@
 import { useState } from "react";
 import SubmitButton from "@/components/submit-button";
 import { editChallengeResponseAction } from "@/app/league/[id]/challenges/actions";
+import SurvivorDropdownPicker from "@/components/survivor-dropdown-picker";
 import type { ChallengeType, CastawayOption } from "@/lib/challenges";
 
 interface EditChallengeResponseProps {
@@ -69,28 +70,12 @@ export default function EditChallengeResponse({
           })}
         </fieldset>
       ) : challengeType === "survivor_dropdown" ? (
-        <>
-          <label htmlFor={`edit-response-${submissionId}`} className="sr-only">
-            Edit your response
-          </label>
-          <select
-            id={`edit-response-${submissionId}`}
-            name="response"
-            required
-            defaultValue={currentResponse}
-            className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
-            aria-label="Select a castaway"
-          >
-            <option value="" disabled>
-              Select a castaway…
-            </option>
-            {dropdownOptions.map((castaway) => (
-              <option key={castaway.id} value={castaway.id}>
-                {castaway.name}
-              </option>
-            ))}
-          </select>
-        </>
+        <SurvivorDropdownPicker
+          name="response"
+          options={dropdownOptions}
+          defaultValue={currentResponse}
+          required
+        />
       ) : (
         <>
           <label htmlFor={`edit-response-${submissionId}`} className="sr-only">

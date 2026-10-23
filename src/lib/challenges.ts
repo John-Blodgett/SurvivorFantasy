@@ -40,6 +40,7 @@ export interface CastawayOption {
   id: string;
   name: string;
   is_eliminated: boolean;
+  photo_url?: string | null;
 }
 
 export interface Challenge {

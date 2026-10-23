@@ -4,6 +4,7 @@ import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
 import EditChallengeResponse from "@/components/edit-challenge-response";
+import SurvivorDropdownPicker from "@/components/survivor-dropdown-picker";
 import { submitChallengeResponseAction } from "./actions";
 import { formatPacificDeadline } from "@/lib/timezone";
 import {
@@ -75,7 +76,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
   // is derived from live castaway state at render time (Req 4.6).
   const { data: rawCastaways } = await supabase
     .from("castaways")
-    .select("id, name, is_eliminated")
+    .select("id, name, is_eliminated, photo_url")
     .eq("league_id", leagueId)
     .order("name", { ascending: true });
 
@@ -83,6 +84,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
     id: c.id as string,
     name: c.name as string,
     is_eliminated: (c.is_eliminated as boolean) ?? false,
+    photo_url: (c.photo_url as string | null) ?? null,
   }));
 
   // Fetch user's submissions
@@ -278,29 +280,12 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                           </fieldset>
                         ) : type === "survivor_dropdown" ? (
                           <>
-                            <label
-                              htmlFor={`response-${challenge.id}`}
-                              className="text-xs font-medium"
-                            >
-                              Your response
-                            </label>
-                            <select
-                              id={`response-${challenge.id}`}
+                            <p className="text-xs font-medium">Your response</p>
+                            <SurvivorDropdownPicker
                               name="response"
+                              options={dropdownOptions}
                               required
-                              defaultValue=""
-                              className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
-                              aria-label="Select a castaway"
-                            >
-                              <option value="" disabled>
-                                Select a castaway…
-                              </option>
-                              {dropdownOptions.map((castaway) => (
-                                <option key={castaway.id} value={castaway.id}>
-                                  {castaway.name}
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </>
                         ) : (
                           <>
