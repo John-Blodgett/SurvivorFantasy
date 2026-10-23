@@ -446,7 +446,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                     <span className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-sm shrink-0">🏆</span>
                   )}
 
-                  {/* Details — single row with wrapping */}
+                  {/* Details */}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">
                       {event.castaway_id ? (
@@ -454,7 +454,9 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                           {event.castaway_name}
                         </Link>
                       ) : (
-                        "Challenge"
+                        <Link href={filterUrl({ player: event.player_id })} className="hover:underline">
+                          {event.player_name}
+                        </Link>
                       )}
                       {event.episode_number > 0 && (
                         <span className="ml-1.5 text-[10px] font-normal text-muted-foreground bg-muted rounded px-1 py-0.5">
@@ -462,9 +464,14 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {event.rule_name ?? "—"} · <Link href={filterUrl({ player: event.player_id })} className="hover:underline">{event.player_name}</Link>
+                    <p className="text-xs text-muted-foreground break-words">
+                      {event.rule_name ?? "—"}
                     </p>
+                    {event.castaway_id && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        <Link href={filterUrl({ player: event.player_id })} className="hover:underline">{event.player_name}</Link>
+                      </p>
+                    )}
                   </div>
 
                   {/* Points */}
