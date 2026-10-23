@@ -354,3 +354,209 @@ describe("Budget enforcement during processing", () => {
     expect(johnResult!.status).toBe("won");
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// Backup claim scenarios — multiple claims per player, prioritized waiver queue
+// ---------------------------------------------------------------------------
+
+describe("Backup claim processing", () => {
+  it("John gets Player1 and Hannah gets Player2 when John bids more on Player1", () => {
+    // John: $5 on Player1 (drop X), $3 on Player2 (drop Y)  — priority 1, 2
+    // Hannah: $4 on Player1 (drop A), $4 on Player2 (drop B) — priority 1, 2
+    const claims: WaiverClaim[] = [
+      {
+        id: "john-p1",
+        league_id: "league-1",
+        player_id: "john",
+        castaway_id: "player1",
+        drop_castaway_id: "x",
+        bid_amount: 5,
+        priority: 1,
+        status: "pending",
+      },
+      {
+        id: "john-p2",
+        league_id: "league-1",
+        player_id: "john",
+        castaway_id: "player2",
+        drop_castaway_id: "y",
+        bid_amount: 3,
+        priority: 2,
+        status: "pending",
+      },
+      {
+        id: "hannah-p1",
+        league_id: "league-1",
+        player_id: "hannah",
+        castaway_id: "player1",
+        drop_castaway_id: "a",
+        bid_amount: 4,
+        priority: 1,
+        status: "pending",
+      },
+      {
+        id: "hannah-p2",
+        league_id: "league-1",
+        player_id: "hannah",
+        castaway_id: "player2",
+        drop_castaway_id: "b",
+        bid_amount: 4,
+        priority: 2,
+        status: "pending",
+      },
+    ];
+
+    const result = processWaiverClaims(claims, 5, undefined, () => 0);
+
+    const johnP1 = result.results.find((r) => r.claim_id === "john-p1");
+    const johnP2 = result.results.find((r) => r.claim_id === "john-p2");
+    const hannahP1 = result.results.find((r) => r.claim_id === "hannah-p1");
+    const hannahP2 = result.results.find((r) => r.claim_id === "hannah-p2");
+
+    // John wins Player1 (highest bid $5)
+    expect(johnP1!.status).toBe("won");
+    // Hannah loses Player1 (outbid by John's $5)
+    expect(hannahP1!.status).toBe("lost");
+    // Hannah wins Player2 — her $4 bid beats John's $3 backup bid
+    expect(hannahP2!.status).toBe("won");
+    // John's Player2 backup loses — Hannah outbids him on Player2
+    expect(johnP2!.status).toBe("lost");
+
+    // Each player gets exactly one castaway
+    expect(result.newAssignments).toHaveLength(2);
+    const johnAssignment = result.newAssignments.find((a) => a.player_id === "john");
+    const hannahAssignment = result.newAssignments.find((a) => a.player_id === "hannah");
+    expect(johnAssignment?.castaway_id).toBe("player1");
+    expect(hannahAssignment?.castaway_id).toBe("player2");
+  });
+
+  it("backup claim with same drop castaway is skipped after higher-priority claim wins", () => {
+    // Player bids $5 on Player1 (drop X) and $3 on Player2 (drop X, same drop).
+    // Player1 claim wins, so Player2 backup with the same drop X is skipped.
+    const claims: WaiverClaim[] = [
+      {
+        id: "main",
+        league_id: "league-1",
+        player_id: "alice",
+        castaway_id: "player1",
+        drop_castaway_id: "x",
+        bid_amount: 5,
+        priority: 1,
+        status: "pending",
+      },
+      {
+        id: "backup",
+        league_id: "league-1",
+        player_id: "alice",
+        castaway_id: "player2",
+        drop_castaway_id: "x",
+        bid_amount: 3,
+        priority: 2,
+        status: "pending",
+      },
+    ];
+
+    const result = processWaiverClaims(claims, 5, undefined, () => 0);
+
+    const mainResult = result.results.find((r) => r.claim_id === "main");
+    const backupResult = result.results.find((r) => r.claim_id === "backup");
+
+    // Main wins
+    expect(mainResult!.status).toBe("won");
+    // Backup is lost — can't drop X twice
+    expect(backupResult!.status).toBe("lost");
+
+    // Only one assignment
+    expect(result.newAssignments).toHaveLength(1);
+    expect(result.newAssignments[0].castaway_id).toBe("player1");
+  });
+
+  it("backup claim fires when the main claim is outbid by another player", () => {
+    // Bob: $5 on Player1 (drop X) [main], $3 on Player2 (drop X) [backup]
+    // Carol: $7 on Player1 (drop A)
+    // Bob loses Player1, so his backup for Player2 uses drop X
+    const claims: WaiverClaim[] = [
+      {
+        id: "bob-main",
+        league_id: "league-1",
+        player_id: "bob",
+        castaway_id: "player1",
+        drop_castaway_id: "x",
+        bid_amount: 5,
+        priority: 1,
+        status: "pending",
+      },
+      {
+        id: "bob-backup",
+        league_id: "league-1",
+        player_id: "bob",
+        castaway_id: "player2",
+        drop_castaway_id: "x",
+        bid_amount: 3,
+        priority: 2,
+        status: "pending",
+      },
+      {
+        id: "carol-p1",
+        league_id: "league-1",
+        player_id: "carol",
+        castaway_id: "player1",
+        drop_castaway_id: "a",
+        bid_amount: 7,
+        priority: 1,
+        status: "pending",
+      },
+    ];
+
+    const result = processWaiverClaims(claims, 5, undefined, () => 0);
+
+    const bobMain = result.results.find((r) => r.claim_id === "bob-main");
+    const bobBackup = result.results.find((r) => r.claim_id === "bob-backup");
+    const carolP1 = result.results.find((r) => r.claim_id === "carol-p1");
+
+    // Carol wins Player1
+    expect(carolP1!.status).toBe("won");
+    // Bob loses Player1
+    expect(bobMain!.status).toBe("lost");
+    // Bob's backup fires — he wins Player2 (drop X not yet used)
+    expect(bobBackup!.status).toBe("won");
+    expect(result.newAssignments.find((a) => a.player_id === "bob")?.castaway_id).toBe("player2");
+  });
+
+  it("priority ordering breaks ties among claims with the same bid amount", () => {
+    // Two players both bid $5 on the same castaway.
+    // Player A has priority 1, player B has priority 2.
+    // Player A should win.
+    const claims: WaiverClaim[] = [
+      {
+        id: "a-claim",
+        league_id: "league-1",
+        player_id: "playerA",
+        castaway_id: "target",
+        drop_castaway_id: "drop-a",
+        bid_amount: 5,
+        priority: 1,
+        status: "pending",
+      },
+      {
+        id: "b-claim",
+        league_id: "league-1",
+        player_id: "playerB",
+        castaway_id: "target",
+        drop_castaway_id: "drop-b",
+        bid_amount: 5,
+        priority: 2,
+        status: "pending",
+      },
+    ];
+
+    const result = processWaiverClaims(claims, 5, undefined, () => 0);
+
+    const aResult = result.results.find((r) => r.claim_id === "a-claim");
+    const bResult = result.results.find((r) => r.claim_id === "b-claim");
+
+    expect(aResult!.status).toBe("won");
+    expect(bResult!.status).toBe("lost");
+  });
+});

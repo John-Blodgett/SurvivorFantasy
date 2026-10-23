@@ -84,22 +84,26 @@ export async function submitWaiverClaimAction(formData: FormData) {
     );
   }
 
-  // Check for duplicate: same player already has a pending claim dropping the same castaway
+  // Check for exact duplicate: same player already targeting the exact same castaway
   const { data: duplicateClaim } = await supabase
     .from("waiver_claims")
     .select("id")
     .eq("league_id", leagueId)
     .eq("player_id", user.id)
-    .eq("drop_castaway_id", dropCastawayId)
+    .eq("castaway_id", castawayId)
     .eq("status", "pending")
     .limit(1)
     .single();
 
   if (duplicateClaim) {
     redirect(
-      `/league/${leagueId}/waiver?error=${encodeURIComponent("You already have a pending claim dropping this castaway.")}`
+      `/league/${leagueId}/waiver?error=${encodeURIComponent("You already have a pending claim for this castaway.")}`
     );
   }
+
+  // Note: multiple claims sharing the same drop_castaway_id are allowed — they act as
+  // backup options. The processing engine ensures a player can only win one claim per
+  // drop castaway (usedDropsByPlayer tracking), so submitting backups is safe.
 
   // Determine priority: next available number for this player's pending claims
   const { data: existingClaims } = await supabase
