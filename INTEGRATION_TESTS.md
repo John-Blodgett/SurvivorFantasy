@@ -235,8 +235,8 @@ For picks 10..19:
 
 ### 4.5 — Receiver accepts trade
 - **Action**: Player 3 calls `acceptTradeInLeagueAction`
-- **Verify**: Trade status changes to "admin_approved" (direct acceptance flow)
-- **Verify**: Team assignments swapped:
+- **Verify**: Trade status changes to "completed" (direct acceptance — no admin step)
+- **Verify**: Team assignments swapped immediately:
   - Player 2 now owns Castaway-B (points_from_episode = 2, source = "trade")
   - Player 3 now owns Castaway-A (points_from_episode = 2, source = "trade")
 - **Verify**: Old team_assignments for those castaways are deleted
@@ -263,18 +263,12 @@ For picks 10..19:
 - **Action**: Try to accept an already-rejected trade
 - **Verify**: Error "Trade is no longer pending"
 
-### 4.10 — Admin trade approval flow (via admin actions)
-- **Action**: Player 8 proposes trade to Player 9
-- **Action**: Player 9 accepts (status → "accepted" if using admin approval flow)
-- **Action**: Admin approves via `approveTradeAction`
-- **Verify**: Trade status = "admin_approved", team assignments swapped
-- **Verify**: points_from_episode set to (latest finalized episode + 1)
+### 4.10 — ~~Admin trade approval flow~~ (removed)
+- Admin approval is no longer part of the trade lifecycle.
+- Once the receiver accepts, the trade is immediately `completed` and rosters are updated.
 
-### 4.11 — Admin rejects accepted trade
-- **Action**: Player proposes, receiver accepts
-- **Action**: Admin calls `adminRejectTradeAction`
-- **Verify**: Trade status = "admin_rejected"
-- **Verify**: No team_assignment changes
+### 4.11 — ~~Admin rejects accepted trade~~ (removed)
+- There is no admin-rejected state. Trades can only be rejected by the receiver or cancelled by the proposer while pending.
 
 ---
 
@@ -507,7 +501,7 @@ For each player:
 - **Verify**: Cannot exceed roster_size limit
 
 ### 8.7 — Admin hub page loads
-- **Verify**: Admin hub page shows all 7 tool links (Castaways, Scoring Rules, Draft Setup, Score Episode, Trade Approval, Waiver Wire, Late-Join)
+- **Verify**: Admin hub page shows all 6 tool links (Castaways, Tribes, Scoring Rules, Draft Setup, Score Episode, Waiver Wire, Late-Join)
 - **Verify**: Non-admin player cannot access admin pages (redirected to /dashboard)
 
 ---

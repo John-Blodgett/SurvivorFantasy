@@ -56,7 +56,6 @@ export default async function AdminHubPage({ params }: PageProps) {
     { href: `/league/${leagueId}/admin/rules`, label: "Scoring Rules", description: "Create and manage point values for events" },
     { href: `/league/${leagueId}/admin/draft`, label: "Draft Setup", description: "Configure draft mode and start the draft" },
     { href: `/league/${leagueId}/admin/episode/${scoreEpisodeNum}`, label: "Score Episode", description: `Score episode ${scoreEpisodeNum}` },
-    { href: `/league/${leagueId}/admin/trades`, label: "Trade Approval", description: "Approve or reject player-accepted trades" },
     { href: `/league/${leagueId}/admin/waiver`, label: "Waiver Wire", description: "Configure schedule and process claims" },
     { href: `/league/${leagueId}/admin/late-join`, label: "Late-Join", description: "Assign castaways to late-joining players" },
   ];

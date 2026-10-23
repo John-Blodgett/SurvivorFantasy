@@ -3,7 +3,7 @@
  *
  * Exercises the full trade lifecycle against a live Supabase database:
  * - Propose trade (creates pending trades row)
- * - Accept trade (status → admin_approved, assignments swapped, points_from_episode set)
+ * - Accept trade (status → completed, assignments swapped immediately, points_from_episode set)
  * - Reject trade (status → rejected, resolved_at set, no assignment changes)
  * - Cancel trade (status → rejected, resolved_at set, no assignment changes)
  * - Validation: cannot trade castaway you don't own
@@ -13,8 +13,8 @@
  * - Concurrent trades: second trade fails when first accepted
  *
  * Server action references:
- * - src/app/league/[id]/trades/actions.ts (proposeTradeAction, acceptTradeAction)
- * - src/app/dashboard/trade-actions.ts (cancelTradeAction, rejectTradeAction)
+ * - src/app/league/[id]/trades/actions.ts (proposeTradeAction, acceptTradeInLeagueAction)
+ * - src/app/dashboard/trade-actions.ts (rejectTradeAction, cancelTradeAction)
  *
  * Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9
  */
@@ -134,10 +134,10 @@ describe("Integration: Trade Lifecycle", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Requirement 7.2: Accept trade — status, assignments swapped, points_from_episode
+  // Requirement 7.2: Accept trade — status completed, assignments swapped, points_from_episode
   // ---------------------------------------------------------------------------
 
-  it("should set status to 'admin_approved', swap team_assignments, and set points_from_episode on accept", async () => {
+  it("should set status to 'completed', swap team_assignments, and set points_from_episode on accept", async () => {
     const admin = getAdminClient();
 
     // Get Player 3's and Player 4's castaways
@@ -164,14 +164,14 @@ describe("Integration: Trade Lifecycle", () => {
     const acceptResult = await acceptTrade(proposeResult.tradeId!, playerIds[3]);
     expect(acceptResult.error).toBeUndefined();
 
-    // Verify trade status
+    // Verify trade status is now 'completed' (no admin step)
     const { data: trade } = await admin
       .from("trades")
       .select("status, resolved_at")
       .eq("id", proposeResult.tradeId!)
       .single();
 
-    expect(trade!.status).toBe("admin_approved");
+    expect(trade!.status).toBe("completed");
     expect(trade!.resolved_at).not.toBeNull();
 
     // Verify assignments are swapped

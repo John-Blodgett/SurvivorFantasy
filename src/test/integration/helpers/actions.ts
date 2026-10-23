@@ -642,124 +642,47 @@ export async function proposeTrade(
 }
 
 /**
- * Accepts a pending trade.
- * - Validates trade is still pending
- * - Validates both players still own their respective castaways
- * - Validates neither castaway is eliminated
- * - Swaps team assignments with points_from_episode = latestFinalized + 1
- * - Sets trade status to "admin_approved"
+ * Accepts a pending trade via the accept_trade RPC (SECURITY DEFINER).
+ * The RPC validates ownership/eligibility, swaps team assignments immediately,
+ * and sets trade status to "completed" — no admin approval step needed.
+ *
+ * Uses the scoped client signed in as receiverId so the RPC auth.uid() check passes.
  */
 export async function acceptTrade(
   tradeId: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _receiverId: string
+  receiverId: string
 ): Promise<{ error?: string }> {
-  const supabase = getAdminClient();
+  // acceptTrade must call the RPC as the receiver so auth.uid() = receiver_id.
+  // We locate the receiver's test credentials from TEST_PLAYERS by matching the
+  // player UUID that was seeded during lifecycle.seed().
+  const admin = getAdminClient();
 
-  const { data: trade } = await supabase
-    .from("trades")
-    .select("id, league_id, proposer_id, receiver_id, proposer_castaway, receiver_castaway, status")
-    .eq("id", tradeId)
+  // Look up the receiver's email so we can sign in as them
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("id", receiverId)
     .single();
 
-  if (!trade) return { error: "Trade not found." };
-  if (trade.status !== "pending") return { error: "Trade is no longer pending." };
+  if (!profile) return { error: "Receiver profile not found." };
 
-  // Validate receiver still owns their castaway
-  const { data: receiverAssignment } = await supabase
-    .from("team_assignments")
-    .select("player_id")
-    .eq("league_id", trade.league_id)
-    .eq("castaway_id", trade.receiver_castaway)
-    .eq("player_id", trade.receiver_id)
-    .single();
+  // Find matching test player credentials
+  const { TEST_PLAYERS } = await import("./constants");
+  const { getScopedClient } = await import("./supabase");
 
-  if (!receiverAssignment) {
-    return { error: "Receiver no longer owns their castaway." };
-  }
+  // Map the receiver UUID → email by listing auth users
+  const { data: authUsers } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const authUser = authUsers?.users.find((u) => u.id === receiverId);
+  if (!authUser?.email) return { error: "Could not find receiver auth user." };
 
-  // Validate proposer still owns their castaway
-  const { data: proposerAssignment } = await supabase
-    .from("team_assignments")
-    .select("player_id")
-    .eq("league_id", trade.league_id)
-    .eq("castaway_id", trade.proposer_castaway)
-    .eq("player_id", trade.proposer_id)
-    .single();
+  const testPlayer = TEST_PLAYERS.find((p) => p.email === authUser.email);
+  if (!testPlayer) return { error: "Receiver is not a known test player." };
 
-  if (!proposerAssignment) {
-    return { error: "Proposer no longer owns their castaway." };
-  }
+  const scopedClient = await getScopedClient(testPlayer.email, testPlayer.password);
+  const { data: result, error } = await scopedClient.rpc("accept_trade", { p_trade_id: tradeId });
 
-  // Validate neither castaway is eliminated
-  const { data: proposerCastaway } = await supabase
-    .from("castaways")
-    .select("is_eliminated")
-    .eq("id", trade.proposer_castaway)
-    .single();
-
-  if (proposerCastaway?.is_eliminated) {
-    return { error: "Eliminated castaways cannot be traded." };
-  }
-
-  const { data: receiverCastaway } = await supabase
-    .from("castaways")
-    .select("is_eliminated")
-    .eq("id", trade.receiver_castaway)
-    .single();
-
-  if (receiverCastaway?.is_eliminated) {
-    return { error: "Eliminated castaways cannot be traded." };
-  }
-
-  // Determine points_from_episode
-  const { data: latestEpisode } = await supabase
-    .from("episodes")
-    .select("number")
-    .eq("league_id", trade.league_id)
-    .eq("is_finalized", true)
-    .order("number", { ascending: false })
-    .limit(1)
-    .single();
-
-  const pointsFromEpisode = (latestEpisode?.number ?? 0) + 1;
-
-  // Delete old team assignments
-  await supabase
-    .from("team_assignments")
-    .delete()
-    .eq("league_id", trade.league_id)
-    .eq("castaway_id", trade.proposer_castaway);
-
-  await supabase
-    .from("team_assignments")
-    .delete()
-    .eq("league_id", trade.league_id)
-    .eq("castaway_id", trade.receiver_castaway);
-
-  // Insert new team assignments (swapped)
-  await supabase.from("team_assignments").insert([
-    {
-      league_id: trade.league_id,
-      player_id: trade.receiver_id,
-      castaway_id: trade.proposer_castaway,
-      points_from_episode: pointsFromEpisode,
-      source: "trade" as const,
-    },
-    {
-      league_id: trade.league_id,
-      player_id: trade.proposer_id,
-      castaway_id: trade.receiver_castaway,
-      points_from_episode: pointsFromEpisode,
-      source: "trade" as const,
-    },
-  ]);
-
-  // Update trade status
-  await supabase
-    .from("trades")
-    .update({ status: "admin_approved", resolved_at: new Date().toISOString() })
-    .eq("id", tradeId);
+  if (error) return { error: error.message };
+  if (result?.error) return { error: result.error };
 
   return {};
 }

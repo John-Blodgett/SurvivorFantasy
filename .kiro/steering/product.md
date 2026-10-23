@@ -8,7 +8,7 @@ A fantasy sports web app for CBS Survivor. Players create or join leagues, draft
 - Castaways: Survivor contestants managed by the league admin; can be eliminated or restored
 - Draft: snake-style draft (live or auto) where players pick castaways for their team
 - Scoring: admin scores episode events using configurable scoring rules; eliminated castaways earn consolation points
-- Trades: 1-for-1 castaway trades between players, requiring receiver acceptance then admin approval
+- Trades: 1-for-1 castaway trades between players, requiring receiver acceptance to complete
 - Waiver wire: mechanism for picking up unowned castaways
 - Challenges: weekly trivia/prediction challenges worth bonus points
 - Leaderboard: aggregated player scores across episodes and challenges

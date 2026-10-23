@@ -50,14 +50,14 @@ export default async function TransactionsPage({ params }: PageProps) {
     .eq("drafts.league_id", leagueId)
     .order("pick_number", { ascending: true });
 
-  // Fetch completed trades (admin_approved)
+  // Fetch completed trades
   const { data: tradesRaw } = await supabase
     .from("trades")
     .select(
       "proposer_id, receiver_id, proposer_castaway, receiver_castaway, resolved_at"
     )
     .eq("league_id", leagueId)
-    .eq("status", "admin_approved")
+    .eq("status", "completed")
     .order("resolved_at", { ascending: true });
 
   // Fetch won waiver claims

@@ -221,7 +221,7 @@ describe("Integration: Leaderboard & Points Integrity", () => {
       .from("trades")
       .select("proposer_castaway")
       .eq("league_id", leagueId)
-      .eq("status", "admin_approved")
+      .eq("status", "completed")
       .limit(1);
 
     if (!trades || trades.length === 0) {

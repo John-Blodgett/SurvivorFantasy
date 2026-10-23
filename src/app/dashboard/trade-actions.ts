@@ -36,8 +36,7 @@ export async function acceptTradeAction(formData: FormData) {
   const leagueId = trade.league_id;
 
   // Accept the trade via a SECURITY DEFINER RPC.
-  // Validates ownership/eligibility and marks trade as 'accepted'.
-  // The assignment swap happens later when the admin approves.
+  // Validates ownership/eligibility, swaps assignments, and marks trade as 'completed'.
   const { data: acceptResult, error: acceptError } = await supabase
     .rpc("accept_trade", { p_trade_id: tradeId });
 
