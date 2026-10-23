@@ -311,9 +311,27 @@ For picks 10..19:
 - **Action**: Player 3 submits claim with bid_amount = 150 (budget is 100)
 - **Verify**: Validation error "Bid amount exceeds your remaining waiver budget."
 
-### 5.7 — Duplicate claim prevention
-- **Action**: Player 1 submits another claim dropping the same castaway they already have a pending claim for
-- **Verify**: Error "You already have a pending claim dropping this castaway."
+### 5.7 — Duplicate claim prevention (same target castaway)
+- **Action**: Player 1 submits another claim targeting the exact same castaway they already have a pending claim for
+- **Verify**: Error "You already have a pending claim for this castaway."
+
+### 5.7b — Multiple backup claims sharing the same drop castaway are allowed
+- **Action**: Player submits claim A: pick Castaway-23, drop Castaway-X, bid $15
+- **Action**: Player submits claim B: pick Castaway-24, drop Castaway-X (same drop), bid $10
+- **Verify**: Both claims are created successfully (no duplicate error)
+- **Action**: Process waivers
+- **Verify**: Claim A wins (higher bid / higher priority)
+- **Verify**: Claim B is "lost" — the drop castaway was already consumed by claim A
+- **Verify**: Player ends up with exactly one new castaway (Castaway-23)
+
+### 5.7c — Backup claim fires when main claim is outbid
+- **Action**: Player X submits main claim: pick Castaway-25, drop X-Drop, bid $10
+- **Action**: Player X submits backup claim: pick Castaway-26, bid $8
+- **Action**: Player Y submits competing claim: pick Castaway-25, bid $20 (outbids Player X)
+- **Action**: Process waivers
+- **Verify**: Player Y wins Castaway-25
+- **Verify**: Player X's main claim is "lost" (outbid)
+- **Verify**: Player X's backup claim is "won" — they get Castaway-26
 
 ### 5.8 — Multiple claims with priority ordering
 - **Action**: Player 1 submits a second claim (different drop castaway), bid 20 for Castaway-23

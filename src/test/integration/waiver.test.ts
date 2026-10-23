@@ -592,6 +592,224 @@ describe("Integration: Waiver Wire", () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Requirement 8.8b: Backup claims — same drop castaway is allowed on submit;
+  // only one claim per drop castaway can win during processing
+  // ---------------------------------------------------------------------------
+
+  it("should allow submitting backup claims with the same drop castaway, and skip the backup when the main claim wins", async () => {
+    const admin = getAdminClient();
+
+    // Clean up any leftover claims
+    await admin.from("waiver_claims").delete().eq("league_id", leagueId);
+
+    // Get player 6's castaways
+    const { data: p6Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[5]);
+
+    expect(p6Assignments!.length).toBeGreaterThan(0);
+    const p6Drop = p6Assignments![0].castaway_id;
+
+    // Find two unassigned, non-eliminated castaways to use as targets
+    const { data: allAssignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId);
+    const assignedIds = new Set((allAssignments ?? []).map((a) => a.castaway_id));
+
+    const targets: string[] = [];
+    for (const cid of castawayIds) {
+      if (targets.length >= 2) break;
+      if (assignedIds.has(cid)) continue;
+      const { data: c } = await admin
+        .from("castaways")
+        .select("is_eliminated")
+        .eq("id", cid)
+        .single();
+      if (c && !c.is_eliminated) targets.push(cid);
+    }
+    expect(targets.length).toBe(2);
+
+    // Main claim: $15 on targets[0], dropping p6Drop
+    const mainClaim = await submitWaiverClaim(
+      leagueId,
+      playerIds[5],
+      targets[0],
+      p6Drop,
+      15
+    );
+    expect(mainClaim.error).toBeUndefined();
+    expect(mainClaim.claimId).toBeDefined();
+
+    // Backup claim: $10 on targets[1], ALSO dropping p6Drop (same drop castaway)
+    // This was previously blocked — should now succeed
+    const backupClaim = await submitWaiverClaim(
+      leagueId,
+      playerIds[5],
+      targets[1],
+      p6Drop,
+      10
+    );
+    expect(backupClaim.error).toBeUndefined();
+    expect(backupClaim.claimId).toBeDefined();
+
+    // Process waivers
+    const processResult = await processWaivers(leagueId);
+    expect(processResult.error).toBeUndefined();
+
+    // Main claim (higher bid, priority 1) should win
+    const { data: mainRow } = await admin
+      .from("waiver_claims")
+      .select("status")
+      .eq("id", mainClaim.claimId!)
+      .single();
+    expect(mainRow!.status).toBe("won");
+
+    // Backup claim should be lost — drop castaway already used by the main win
+    const { data: backupRow } = await admin
+      .from("waiver_claims")
+      .select("status")
+      .eq("id", backupClaim.claimId!)
+      .single();
+    expect(backupRow!.status).toBe("lost");
+
+    // Player 6 should have exactly one new waiver assignment (targets[0])
+    const { data: p6NewAssignment } = await admin
+      .from("team_assignments")
+      .select("castaway_id, source")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[5])
+      .eq("source", "waiver")
+      .single();
+    expect(p6NewAssignment!.castaway_id).toBe(targets[0]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Requirement 8.8c: Backup claims — backup fires when main claim loses to a
+  // higher-bidding competitor
+  // ---------------------------------------------------------------------------
+
+  it("should process backup claim when main claim is outbid by another player", async () => {
+    const admin = getAdminClient();
+
+    // Clean up any leftover claims
+    await admin.from("waiver_claims").delete().eq("league_id", leagueId);
+
+    // Get player 7 and player 8's castaways
+    const { data: p7Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[6]);
+
+    const { data: p8Assignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[7]);
+
+    expect(p7Assignments!.length).toBeGreaterThan(0);
+    expect(p8Assignments!.length).toBeGreaterThan(0);
+
+    const p7Drop = p7Assignments![0].castaway_id;
+    const p8Drop = p8Assignments![0].castaway_id;
+
+    // Find two unassigned, non-eliminated castaways
+    const { data: allAssignments } = await admin
+      .from("team_assignments")
+      .select("castaway_id")
+      .eq("league_id", leagueId);
+    const assignedIds = new Set((allAssignments ?? []).map((a) => a.castaway_id));
+
+    const targets: string[] = [];
+    for (const cid of castawayIds) {
+      if (targets.length >= 2) break;
+      if (assignedIds.has(cid)) continue;
+      const { data: c } = await admin
+        .from("castaways")
+        .select("is_eliminated")
+        .eq("id", cid)
+        .single();
+      if (c && !c.is_eliminated) targets.push(cid);
+    }
+    expect(targets.length).toBe(2);
+
+    // Player 7: $10 on targets[0] (main), $8 on targets[1] (backup) — different drops
+    const p7Main = await submitWaiverClaim(
+      leagueId,
+      playerIds[6],
+      targets[0],
+      p7Drop,
+      10
+    );
+    expect(p7Main.error).toBeUndefined();
+
+    // Find a second castaway Player 7 owns for the backup drop
+    const p7SecondDrop = p7Assignments!.length > 1
+      ? p7Assignments![1].castaway_id
+      : p7Drop; // same drop is fine — backup will fire if main loses
+
+    const p7Backup = await submitWaiverClaim(
+      leagueId,
+      playerIds[6],
+      targets[1],
+      p7SecondDrop !== p7Drop ? p7SecondDrop : p7Drop,
+      8
+    );
+    expect(p7Backup.error).toBeUndefined();
+
+    // Player 8: $20 on targets[0] (outbids Player 7's main)
+    const p8Claim = await submitWaiverClaim(
+      leagueId,
+      playerIds[7],
+      targets[0],
+      p8Drop,
+      20
+    );
+    expect(p8Claim.error).toBeUndefined();
+
+    // Process waivers
+    const processResult = await processWaivers(leagueId);
+    expect(processResult.error).toBeUndefined();
+
+    // Player 8 wins targets[0] (higher bid)
+    const { data: p8Row } = await admin
+      .from("waiver_claims")
+      .select("status")
+      .eq("id", p8Claim.claimId!)
+      .single();
+    expect(p8Row!.status).toBe("won");
+
+    // Player 7's main claim loses (outbid)
+    const { data: p7MainRow } = await admin
+      .from("waiver_claims")
+      .select("status")
+      .eq("id", p7Main.claimId!)
+      .single();
+    expect(p7MainRow!.status).toBe("lost");
+
+    // Player 7's backup fires — they get targets[1] (no competition)
+    const { data: p7BackupRow } = await admin
+      .from("waiver_claims")
+      .select("status")
+      .eq("id", p7Backup.claimId!)
+      .single();
+    expect(p7BackupRow!.status).toBe("won");
+
+    // Verify Player 7 has a waiver assignment for targets[1]
+    const { data: p7Assignment } = await admin
+      .from("team_assignments")
+      .select("castaway_id, source")
+      .eq("league_id", leagueId)
+      .eq("player_id", playerIds[6])
+      .eq("source", "waiver")
+      .single();
+    expect(p7Assignment!.castaway_id).toBe(targets[1]);
+  });
+
+  // ---------------------------------------------------------------------------
   // Requirement 8.9: $0 bid accepted and budget unchanged if won
   // ---------------------------------------------------------------------------
 
