@@ -10,10 +10,12 @@ export async function adminEndAllyAction(formData: FormData) {
   const allyId = formData.get("ally_id") as string;
   const { supabase } = await requireLeagueAdmin(leagueId);
 
-  const basePath = `/league/${leagueId}/admin/allies`;
+  // Alliances are now managed under the merged "Castaways & Tribes" admin page.
+  const pagePath = `/league/${leagueId}/admin/castaways`;
+  const basePath = `${pagePath}?section=alliances`;
 
   if (!allyId) {
-    redirect(`${basePath}?error=${encodeURIComponent("Missing alliance ID.")}`);
+    redirect(`${basePath}&error=${encodeURIComponent("Missing alliance ID.")}`);
   }
 
   const { data: result } = await supabase.rpc("end_ally", {
@@ -22,11 +24,11 @@ export async function adminEndAllyAction(formData: FormData) {
   });
 
   if (result?.error) {
-    redirect(`${basePath}?error=${encodeURIComponent(result.error)}`);
+    redirect(`${basePath}&error=${encodeURIComponent(result.error)}`);
   }
 
-  revalidatePath(basePath);
+  revalidatePath(pagePath);
   revalidatePath(`/league/${leagueId}/leaderboard`);
   revalidatePath(`/league/${leagueId}/waiver`);
-  redirect(`${basePath}?success=ally_ended`);
+  redirect(`${basePath}&success=ally_ended`);
 }

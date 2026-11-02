@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
 import {
   removeEpisodeEventAction,
@@ -127,7 +127,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="League"
       badge={isFinalized ? "Finalized" : undefined}
-      navLinks={getAllLeagueNavLinks(leagueId, true)}
+      navLinks={await buildLeagueNav(supabase, leagueId, true)}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
         {searchParams.error && (

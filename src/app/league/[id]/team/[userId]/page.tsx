@@ -9,7 +9,7 @@ import type {
   ChallengeSubmission,
 } from "@/lib/scoring";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import TradeProposalForm from "@/components/trade-proposal-form";
 
 interface PageProps {
@@ -281,7 +281,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
       title={isOwnTeam ? `My Team — ${league.name}` : `${displayName}'s Team — ${league.name}`}
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="Leaderboard"
-      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6">
         {/* Summary header */}

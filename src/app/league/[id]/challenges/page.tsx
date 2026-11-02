@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
 import EditChallengeResponse from "@/components/edit-challenge-response";
 import SurvivorDropdownPicker from "@/components/survivor-dropdown-picker";
@@ -108,7 +108,7 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
       title={`${league.name} — Weekly Challenges`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
         {searchParams.error && (

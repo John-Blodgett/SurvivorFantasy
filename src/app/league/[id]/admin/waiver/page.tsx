@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
 import { updateWaiverScheduleAction, processWaiversAction } from "./actions";
 
@@ -73,7 +73,7 @@ export default async function AdminWaiverPage({ params, searchParams }: PageProp
       title={`Waiver Wire Admin — ${league.name}`}
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="League"
-      navLinks={getAllLeagueNavLinks(leagueId, true)}
+      navLinks={await buildLeagueNav(supabase, leagueId, true)}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {toastMessage && (

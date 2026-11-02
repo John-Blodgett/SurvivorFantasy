@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import { groupEventsByCastaway, type RecapEvent } from "@/lib/episode-recap";
 
 interface PageProps {
@@ -57,7 +57,7 @@ export default async function EpisodeRecapPage({ params }: PageProps) {
         title={`Episode ${episodeNumber}`}
         backHref={`/league/${leagueId}/leaderboard`}
         backLabel="Leaderboard"
-        navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+        navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
       >
         <div className="p-4 sm:p-6 max-w-3xl mx-auto">
           <p className="text-muted-foreground text-sm">
@@ -112,7 +112,7 @@ export default async function EpisodeRecapPage({ params }: PageProps) {
       title={`Episode ${episodeNumber}${episode.title ? ` — ${episode.title}` : ""}`}
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="Leaderboard"
-      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
       badge={episode.is_finalized ? "Finalized" : undefined}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">

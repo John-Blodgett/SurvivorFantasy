@@ -47,7 +47,6 @@ export default async function DraftPage({
   if (!league) redirect("/dashboard");
 
   const isAdmin = league.admin_id === user.id;
-  const navLinks = getAllLeagueNavLinks(leagueId, isAdmin);
 
   // Load draft
   const { data: draft } = await supabase
@@ -55,6 +54,10 @@ export default async function DraftPage({
     .select("id, status, current_pick_index, started_at, pick_started_at")
     .eq("league_id", leagueId)
     .single();
+
+  const navLinks = getAllLeagueNavLinks(leagueId, isAdmin, {
+    draftStatus: (draft?.status as "pending" | "active" | "complete" | undefined) ?? null,
+  });
 
   // ── PRE-DRAFT: no draft record or draft is pending ──
   if (!draft || draft.status === "pending") {

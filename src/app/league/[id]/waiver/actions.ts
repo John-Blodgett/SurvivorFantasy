@@ -422,5 +422,5 @@ export async function createAllyAction(formData: FormData) {
   }
 
   revalidatePath(basePath);
-  redirect(`${basePath}?success=ally_created`);
+  redirect(`${basePath}?success=ally_created&section=alliance`);
 }

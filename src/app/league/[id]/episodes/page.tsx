@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import { sortEpisodesDescending, type RecapEpisode } from "@/lib/episode-recap";
 
 interface PageProps {
@@ -61,7 +61,7 @@ export default async function SeasonSummaryPage({ params }: PageProps) {
       title={`${league.name} — Season ${league.season_number} Episodes`}
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="Leaderboard"
-      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-4">
         {sortedEpisodes.length === 0 ? (

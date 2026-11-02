@@ -14,7 +14,8 @@ export async function acceptTradeInLeagueAction(formData: FormData) {
 
   const tradeId = formData.get("trade_id") as string;
   const leagueId = formData.get("league_id") as string;
-  if (!tradeId || !leagueId) redirect(`/league/${leagueId}/trades?error=Missing+data`);
+  const basePath = `/league/${leagueId}/waiver?section=trades`;
+  if (!tradeId || !leagueId) redirect(`${basePath}&error=Missing+data`);
 
   const { data: trade } = await supabase
     .from("trades")
@@ -23,11 +24,11 @@ export async function acceptTradeInLeagueAction(formData: FormData) {
     .single();
 
   if (!trade || trade.receiver_id !== user.id) {
-    redirect(`/league/${leagueId}/trades?error=Trade+not+found`);
+    redirect(`${basePath}&error=Trade+not+found`);
   }
 
   if (trade.status !== "pending") {
-    redirect(`/league/${leagueId}/trades?error=Trade+is+no+longer+pending`);
+    redirect(`${basePath}&error=Trade+is+no+longer+pending`);
   }
 
   // Accept the trade via a SECURITY DEFINER RPC.
@@ -37,13 +38,13 @@ export async function acceptTradeInLeagueAction(formData: FormData) {
 
   if (acceptError || acceptResult?.error) {
     const msg = acceptError?.message ?? acceptResult?.error ?? "Failed to accept trade";
-    redirect(`/league/${leagueId}/trades?error=${encodeURIComponent(msg)}`);
+    redirect(`${basePath}&error=${encodeURIComponent(msg)}`);
   }
 
-  revalidatePath(`/league/${leagueId}/trades`);
+  revalidatePath(`/league/${leagueId}/waiver`);
   revalidatePath(`/league/${leagueId}/leaderboard`);
   revalidatePath(`/league/${leagueId}/team`);
-  redirect(`/league/${leagueId}/trades?success=trade_accepted`);
+  redirect(`${basePath}&success=trade_accepted`);
 }
 
 export async function rejectTradeInLeagueAction(formData: FormData) {
@@ -56,7 +57,8 @@ export async function rejectTradeInLeagueAction(formData: FormData) {
 
   const tradeId = formData.get("trade_id") as string;
   const leagueId = formData.get("league_id") as string;
-  if (!tradeId || !leagueId) redirect(`/league/${leagueId}/trades?error=Missing+data`);
+  const basePath = `/league/${leagueId}/waiver?section=trades`;
+  if (!tradeId || !leagueId) redirect(`${basePath}&error=Missing+data`);
 
   const { data: trade } = await supabase
     .from("trades")
@@ -65,11 +67,11 @@ export async function rejectTradeInLeagueAction(formData: FormData) {
     .single();
 
   if (!trade || trade.receiver_id !== user.id) {
-    redirect(`/league/${leagueId}/trades?error=Trade+not+found`);
+    redirect(`${basePath}&error=Trade+not+found`);
   }
 
   if (trade.status !== "pending") {
-    redirect(`/league/${leagueId}/trades?error=Trade+is+no+longer+pending`);
+    redirect(`${basePath}&error=Trade+is+no+longer+pending`);
   }
 
   const { error } = await supabase
@@ -78,11 +80,11 @@ export async function rejectTradeInLeagueAction(formData: FormData) {
     .eq("id", tradeId);
 
   if (error) {
-    redirect(`/league/${leagueId}/trades?error=Failed+to+reject+trade`);
+    redirect(`${basePath}&error=Failed+to+reject+trade`);
   }
 
-  revalidatePath(`/league/${leagueId}/trades`);
-  redirect(`/league/${leagueId}/trades?success=trade_rejected`);
+  revalidatePath(`/league/${leagueId}/waiver`);
+  redirect(`${basePath}&success=trade_rejected`);
 }
 
 export async function cancelTradeAction(formData: FormData) {
@@ -95,7 +97,8 @@ export async function cancelTradeAction(formData: FormData) {
 
   const tradeId = formData.get("trade_id") as string;
   const leagueId = formData.get("league_id") as string;
-  if (!tradeId || !leagueId) redirect(`/league/${leagueId}/trades?error=Missing+data`);
+  const basePath = `/league/${leagueId}/waiver?section=trades`;
+  if (!tradeId || !leagueId) redirect(`${basePath}&error=Missing+data`);
 
   const { data: trade } = await supabase
     .from("trades")
@@ -104,11 +107,11 @@ export async function cancelTradeAction(formData: FormData) {
     .single();
 
   if (!trade || trade.proposer_id !== user.id) {
-    redirect(`/league/${leagueId}/trades?error=Trade+not+found`);
+    redirect(`${basePath}&error=Trade+not+found`);
   }
 
   if (trade.status !== "pending") {
-    redirect(`/league/${leagueId}/trades?error=Trade+is+no+longer+pending`);
+    redirect(`${basePath}&error=Trade+is+no+longer+pending`);
   }
 
   const { error } = await supabase
@@ -117,11 +120,11 @@ export async function cancelTradeAction(formData: FormData) {
     .eq("id", tradeId);
 
   if (error) {
-    redirect(`/league/${leagueId}/trades?error=Failed+to+cancel+trade`);
+    redirect(`${basePath}&error=Failed+to+cancel+trade`);
   }
 
-  revalidatePath(`/league/${leagueId}/trades`);
-  redirect(`/league/${leagueId}/trades?success=trade_cancelled`);
+  revalidatePath(`/league/${leagueId}/waiver`);
+  redirect(`${basePath}&success=trade_cancelled`);
 }
 
 
@@ -137,10 +140,10 @@ export async function proposeTradeFromTradesPageAction(formData: FormData) {
   const receiverId = formData.get("receiver_id") as string;
   const proposerCastawayId = formData.get("proposer_castaway_id") as string;
   const receiverCastawayId = formData.get("receiver_castaway_id") as string;
-  const basePath = `/league/${leagueId}/trades`;
+  const basePath = `/league/${leagueId}/waiver?section=trades`;
 
   if (!leagueId || !receiverId || !proposerCastawayId || !receiverCastawayId) {
-    redirect(`${basePath}?error=Missing+fields`);
+    redirect(`${basePath}&error=Missing+fields`);
   }
 
   // Verify both players are members
@@ -161,7 +164,7 @@ export async function proposeTradeFromTradesPageAction(formData: FormData) {
     .single();
 
   if (!receiverMembership) {
-    redirect(`${basePath}?error=Player+not+in+league`);
+    redirect(`${basePath}&error=Player+not+in+league`);
   }
 
   // Fetch castaway info for validation
@@ -210,7 +213,7 @@ export async function proposeTradeFromTradesPageAction(formData: FormData) {
   );
 
   if (!validation.valid) {
-    redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
+    redirect(`${basePath}&error=${encodeURIComponent(validation.error!)}`);
   }
 
   const { error } = await supabase.from("trades").insert({
@@ -226,6 +229,6 @@ export async function proposeTradeFromTradesPageAction(formData: FormData) {
     redirect(`${basePath}?error=${encodeURIComponent("Failed to propose trade.")}`);
   }
 
-  revalidatePath(basePath);
-  redirect(`${basePath}?success=trade_proposed`);
+  revalidatePath(`/league/${leagueId}/waiver`);
+  redirect(`${basePath}&success=trade_proposed`);
 }

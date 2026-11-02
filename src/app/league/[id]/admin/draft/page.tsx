@@ -3,13 +3,19 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
+import SectionTabs from "@/components/section-tabs";
 import SubmitButton from "@/components/submit-button";
+// NOTE: this page already loads the draft row, so we build nav links from that
+// status directly rather than re-querying via buildLeagueNav.
 import { configureDraftAction, startDraftAction, randomizeDraftOrderAction } from "./actions";
+import { assignCastawayAction } from "../late-join/actions";
 import { orderPlayersForDraft } from "@/lib/draft";
+
+type DraftSection = "setup" | "late-join";
 
 interface PageProps {
   params: { id: string };
-  searchParams: { error?: string; success?: string };
+  searchParams: { error?: string; success?: string; section?: string };
 }
 
 export default async function AdminDraftPage({ params, searchParams }: PageProps) {
@@ -89,14 +95,95 @@ export default async function AdminDraftPage({ params, searchParams }: PageProps
       ? "Auto draft completed successfully!"
       : searchParams.success === "order_randomized"
       ? "Draft order randomized."
+      : searchParams.success === "assigned"
+      ? "Castaway assigned successfully."
       : null;
+
+  // ---------------------------------------------------------------------------
+  // Late-Join section data (folded in from the former /admin/late-join page)
+  // ---------------------------------------------------------------------------
+  const { data: ljAssignments } = await supabase
+    .from("team_assignments")
+    .select("player_id, castaway_id")
+    .eq("league_id", league.id);
+
+  const ljAssignmentsByPlayer = new Map<string, number>();
+  for (const a of ljAssignments ?? []) {
+    ljAssignmentsByPlayer.set(
+      a.player_id,
+      (ljAssignmentsByPlayer.get(a.player_id) ?? 0) + 1
+    );
+  }
+
+  const playersNeedingAssignment = (members ?? [])
+    .map((m) => {
+      const profile = m.profiles as unknown as { display_name: string } | null;
+      return {
+        id: m.player_id,
+        display_name: profile?.display_name ?? "Unknown",
+        current_count: ljAssignmentsByPlayer.get(m.player_id) ?? 0,
+      };
+    })
+    .filter((p) => p.current_count < (league.roster_size ?? 1));
+
+  const assignedCastawayIds = (ljAssignments ?? []).map((a) => a.castaway_id);
+
+  let availableCastaways: { id: string; name: string }[] = [];
+  if (assignedCastawayIds.length > 0) {
+    const { data } = await supabase
+      .from("castaways")
+      .select("id, name")
+      .eq("league_id", league.id)
+      .eq("is_eliminated", false)
+      .not("id", "in", `(${assignedCastawayIds.join(",")})`);
+    availableCastaways = data ?? [];
+  } else {
+    const { data } = await supabase
+      .from("castaways")
+      .select("id, name")
+      .eq("league_id", league.id)
+      .eq("is_eliminated", false);
+    availableCastaways = data ?? [];
+  }
+
+  const { data: latestFinalizedEpisode } = await supabase
+    .from("episodes")
+    .select("number")
+    .eq("league_id", league.id)
+    .eq("is_finalized", true)
+    .order("number", { ascending: false })
+    .limit(1)
+    .single();
+
+  const pointsFromEpisode = (latestFinalizedEpisode?.number ?? 0) + 1;
+
+  // ---------------------------------------------------------------------------
+  // Section resolution
+  // ---------------------------------------------------------------------------
+  const requestedSection = searchParams.section as DraftSection | undefined;
+  const validSections: DraftSection[] = ["setup", "late-join"];
+  const section: DraftSection =
+    requestedSection && validSections.includes(requestedSection)
+      ? requestedSection
+      : "setup";
+
+  const sectionTabs = [
+    { href: `/league/${leagueId}/admin/draft?section=setup`, label: "Draft Setup" },
+    {
+      href: `/league/${leagueId}/admin/draft?section=late-join`,
+      label: "Late-Join",
+      badge: isComplete ? playersNeedingAssignment.length : 0,
+    },
+  ];
 
   return (
     <AppShell
       title={`Draft — ${league.name}`}
       backHref={`/league/${leagueId}/leaderboard`}
       backLabel="League"
-      navLinks={getAllLeagueNavLinks(leagueId, true)}
+      navLinks={getAllLeagueNavLinks(leagueId, true, {
+        draftStatus: (draft?.status as "pending" | "active" | "complete" | undefined) ?? null,
+      })}
     >
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {searchParams.error && (
@@ -117,6 +204,13 @@ export default async function AdminDraftPage({ params, searchParams }: PageProps
           </p>
         )}
 
+        <SectionTabs tabs={sectionTabs} active={`/league/${leagueId}/admin/draft?section=${section}`} />
+
+        {/* ================================================================== */}
+        {/* DRAFT SETUP section                                                */}
+        {/* ================================================================== */}
+        {section === "setup" && (
+        <div className="space-y-8">
         {/* Draft status banner */}
         <section aria-labelledby="status-heading">
           <h2 id="status-heading" className="text-base font-semibold mb-3">
@@ -323,6 +417,94 @@ export default async function AdminDraftPage({ params, searchParams }: PageProps
               </p>
             </div>
           </section>
+        )}
+        </div>
+        )}
+
+        {/* ================================================================== */}
+        {/* LATE-JOIN section                                                 */}
+        {/* ================================================================== */}
+        {section === "late-join" && (
+          <div className="space-y-8">
+            {!isComplete && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm text-amber-800">
+                  The draft has not been completed yet. Late-join assignments are
+                  only available after the draft is finished.
+                </p>
+              </div>
+            )}
+
+            {isComplete && (
+              <>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <p className="text-sm text-muted-foreground">
+                    Points for assigned castaways will count from{" "}
+                    <span className="font-medium text-foreground">
+                      Episode {pointsFromEpisode}
+                    </span>{" "}
+                    onward.
+                  </p>
+                </div>
+
+                {playersNeedingAssignment.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border p-10 text-center">
+                    <p className="text-muted-foreground text-sm">
+                      All players have full rosters. No late-join assignments needed.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {playersNeedingAssignment.map((player) => (
+                      <div
+                        key={player.id}
+                        className="rounded-lg border border-border bg-card p-4 space-y-3"
+                      >
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-medium text-sm">
+                            {player.display_name}
+                          </h3>
+                          <span className="text-xs text-muted-foreground">
+                            {player.current_count} / {league.roster_size} castaways
+                          </span>
+                        </div>
+
+                        {availableCastaways.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            No available castaways to assign.
+                          </p>
+                        ) : (
+                          <form action={assignCastawayAction} className="flex flex-col sm:flex-row gap-2">
+                            <input type="hidden" name="league_id" value={leagueId} />
+                            <input type="hidden" name="player_id" value={player.id} />
+                            <select
+                              name="castaway_id"
+                              required
+                              className="flex-1 rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                              aria-label={`Select castaway for ${player.display_name}`}
+                            >
+                              <option value="">Select a castaway...</option>
+                              {availableCastaways.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                            <SubmitButton
+                              pendingText="Assigning…"
+                              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                            >
+                              Assign
+                            </SubmitButton>
+                          </form>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
     </AppShell>

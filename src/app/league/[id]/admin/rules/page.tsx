@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import SubmitButton from "@/components/submit-button";
 import { createRuleAction, updateRuleAction, deleteRuleAction } from "./actions";
 import type { ScoringRule } from "@/lib/scoring-rules";
@@ -38,7 +38,7 @@ export default async function AdminRulesPage({ params, searchParams }: PageProps
     : null;
 
   return (
-    <AppShell title={`Scoring Rules — ${league.name}`} backHref={`/league/${leagueId}/leaderboard`} backLabel="League" navLinks={getAllLeagueNavLinks(leagueId, true)}>
+    <AppShell title={`Scoring Rules — ${league.name}`} backHref={`/league/${leagueId}/leaderboard`} backLabel="League" navLinks={await buildLeagueNav(supabase, leagueId, true)}>
       <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-8">
         {searchParams.error && (
           <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">{searchParams.error}</p>

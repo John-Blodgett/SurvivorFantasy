@@ -8,14 +8,16 @@ import { requireLeagueAdmin } from "../helpers";
 export async function createTribeAction(formData: FormData) {
   const leagueId = formData.get("league_id") as string;
   const { supabase } = await requireLeagueAdmin(leagueId);
-  const basePath = `/league/${leagueId}/admin/tribes`;
+  // Tribes are now managed under the merged "Castaways & Tribes" admin page.
+  const pagePath = `/league/${leagueId}/admin/castaways`;
+  const basePath = `${pagePath}?section=tribes`;
 
   const name = (formData.get("name") as string | null) ?? "";
   const color = (formData.get("color") as string | null) ?? "";
 
   const validation = validateCreateTribe({ name, color });
   if (!validation.valid) {
-    redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
+    redirect(`${basePath}&error=${encodeURIComponent(validation.error!)}`);
   }
 
   const { error } = await supabase.from("tribes").insert({
@@ -26,31 +28,32 @@ export async function createTribeAction(formData: FormData) {
 
   if (error) {
     if (error.code === "23505") {
-      redirect(`${basePath}?error=${encodeURIComponent("A tribe with this name already exists.")}`);
+      redirect(`${basePath}&error=${encodeURIComponent("A tribe with this name already exists.")}`);
     }
-    redirect(`${basePath}?error=${encodeURIComponent("Failed to create tribe. Please try again.")}`);
+    redirect(`${basePath}&error=${encodeURIComponent("Failed to create tribe. Please try again.")}`);
   }
 
-  revalidatePath(basePath);
-  redirect(`${basePath}?success=created`);
+  revalidatePath(pagePath);
+  redirect(`${basePath}&success=created`);
 }
 
 export async function updateTribeAction(formData: FormData) {
   const leagueId = formData.get("league_id") as string;
   const { supabase } = await requireLeagueAdmin(leagueId);
-  const basePath = `/league/${leagueId}/admin/tribes`;
+  const pagePath = `/league/${leagueId}/admin/castaways`;
+  const basePath = `${pagePath}?section=tribes`;
 
   const tribeId = formData.get("tribe_id") as string;
   const name = (formData.get("name") as string | null) ?? "";
   const color = (formData.get("color") as string | null) ?? "";
 
   if (!tribeId) {
-    redirect(`${basePath}?error=${encodeURIComponent("Missing tribe ID.")}`);
+    redirect(`${basePath}&error=${encodeURIComponent("Missing tribe ID.")}`);
   }
 
   const validation = validateUpdateTribe({ name, color });
   if (!validation.valid) {
-    redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
+    redirect(`${basePath}&error=${encodeURIComponent(validation.error!)}`);
   }
 
   const { error } = await supabase
@@ -61,23 +64,24 @@ export async function updateTribeAction(formData: FormData) {
 
   if (error) {
     if (error.code === "23505") {
-      redirect(`${basePath}?error=${encodeURIComponent("A tribe with this name already exists.")}`);
+      redirect(`${basePath}&error=${encodeURIComponent("A tribe with this name already exists.")}`);
     }
-    redirect(`${basePath}?error=${encodeURIComponent("Failed to update tribe. Please try again.")}`);
+    redirect(`${basePath}&error=${encodeURIComponent("Failed to update tribe. Please try again.")}`);
   }
 
-  revalidatePath(basePath);
-  redirect(`${basePath}?success=updated`);
+  revalidatePath(pagePath);
+  redirect(`${basePath}&success=updated`);
 }
 
 export async function deleteTribeAction(formData: FormData) {
   const leagueId = formData.get("league_id") as string;
   const { supabase } = await requireLeagueAdmin(leagueId);
-  const basePath = `/league/${leagueId}/admin/tribes`;
+  const pagePath = `/league/${leagueId}/admin/castaways`;
+  const basePath = `${pagePath}?section=tribes`;
 
   const tribeId = formData.get("tribe_id") as string;
   if (!tribeId) {
-    redirect(`${basePath}?error=${encodeURIComponent("Missing tribe ID.")}`);
+    redirect(`${basePath}&error=${encodeURIComponent("Missing tribe ID.")}`);
   }
 
   // Check if any castaways are assigned to this tribe
@@ -89,7 +93,7 @@ export async function deleteTribeAction(formData: FormData) {
 
   if (count && count > 0) {
     redirect(
-      `${basePath}?error=${encodeURIComponent("Cannot delete a tribe that has castaways assigned. Reassign them first.")}`
+      `${basePath}&error=${encodeURIComponent("Cannot delete a tribe that has castaways assigned. Reassign them first.")}`
     );
   }
 
@@ -100,9 +104,9 @@ export async function deleteTribeAction(formData: FormData) {
     .eq("league_id", leagueId);
 
   if (error) {
-    redirect(`${basePath}?error=${encodeURIComponent("Failed to delete tribe. Please try again.")}`);
+    redirect(`${basePath}&error=${encodeURIComponent("Failed to delete tribe. Please try again.")}`);
   }
 
-  revalidatePath(basePath);
-  redirect(`${basePath}?success=deleted`);
+  revalidatePath(pagePath);
+  redirect(`${basePath}&success=deleted`);
 }

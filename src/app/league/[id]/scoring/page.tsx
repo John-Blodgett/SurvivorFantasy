@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 
 interface PageProps {
   params: { id: string };
@@ -311,7 +311,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       title={`${league.name} — Scoring Log`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <p className="text-sm text-muted-foreground">

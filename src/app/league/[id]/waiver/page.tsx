@@ -1,18 +1,27 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
+import SectionTabs from "@/components/section-tabs";
 import WaiverPoolGrid from "@/components/waiver-pool-grid";
 import WaiverPendingClaims from "@/components/waiver-pending-claims";
+import TradeProposalWithPlayer from "@/components/trade-proposal-with-player";
 import SubmitButton from "@/components/submit-button";
 import { createAllyAction } from "./actions";
+import {
+  acceptTradeInLeagueAction,
+  rejectTradeInLeagueAction,
+  cancelTradeAction,
+} from "../trades/actions";
 import { computeAllyPoints } from "@/lib/scoring";
 import type { EpisodeEvent, TeamAssignment, EliminatedCastaway, FinalizedEpisode } from "@/lib/scoring";
 import { computePlayerScore } from "@/lib/scoring";
 
+type MovesSection = "waiver" | "trades" | "alliance";
+
 interface PageProps {
   params: { id: string };
-  searchParams: { error?: string; success?: string; ally?: string };
+  searchParams: { error?: string; success?: string; ally?: string; section?: string };
 }
 
 export default async function WaiverWirePage({ params, searchParams }: PageProps) {
@@ -313,12 +322,123 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
     ? allyEligibleCastaways.find((c) => c.id === confirmingAllyId)
     : null;
 
+  // ---------------------------------------------------------------------------
+  // Trades section data (folded in from the former standalone /trades page)
+  // ---------------------------------------------------------------------------
+
+  // Fetch display names for all league members (for the trade proposal form)
+  const { data: allMembers } = await supabase
+    .from("league_members")
+    .select("player_id, profiles(display_name)")
+    .eq("league_id", leagueId);
+
+  // Build the current user's tradable castaways and other players' rosters.
+  // Only active (non-eliminated) castaways can be traded.
+  const assignmentOwnerMap = new Map(
+    (allAssignments ?? []).map((a) => [a.castaway_id, a.player_id])
+  );
+  const activeCastawayById = new Map(
+    (allCastaways ?? []).filter((c) => !c.is_eliminated).map((c) => [c.id, c])
+  );
+
+  const myTradeCastaways = Array.from(activeCastawayById.values())
+    .filter((c) => assignmentOwnerMap.get(c.id) === user.id)
+    .map((c) => ({ id: c.id, name: c.name }));
+
+  const otherTradePlayers = (allMembers ?? [])
+    .filter((m) => m.player_id !== user.id)
+    .map((m) => {
+      const profileData = m.profiles as unknown as { display_name: string } | null;
+      const playerCastaways = Array.from(activeCastawayById.values())
+        .filter((c) => assignmentOwnerMap.get(c.id) === m.player_id)
+        .map((c) => ({ id: c.id, name: c.name }));
+      return {
+        id: m.player_id,
+        display_name: profileData?.display_name ?? "Unknown",
+        castaways: playerCastaways,
+      };
+    });
+
+  // Pending trades the current user is involved in
+  const { data: tradesRaw } = await supabase
+    .from("trades")
+    .select(
+      "id, proposer_id, receiver_id, proposer_castaway, receiver_castaway, status, proposed_at"
+    )
+    .eq("league_id", leagueId)
+    .or(`proposer_id.eq.${user.id},receiver_id.eq.${user.id}`)
+    .eq("status", "pending")
+    .order("proposed_at", { ascending: false });
+
+  const trades = tradesRaw ?? [];
+
+  const tradePlayerIds = Array.from(
+    new Set(trades.flatMap((t) => [t.proposer_id, t.receiver_id]))
+  );
+  const tradeCastawayIds = Array.from(
+    new Set(trades.flatMap((t) => [t.proposer_castaway, t.receiver_castaway]))
+  );
+
+  const { data: tradeProfiles } = await supabase
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", tradePlayerIds.length > 0 ? tradePlayerIds : ["__none__"]);
+
+  const { data: tradeCastaways } = await supabase
+    .from("castaways")
+    .select("id, name")
+    .in("id", tradeCastawayIds.length > 0 ? tradeCastawayIds : ["__none__"]);
+
+  const tradeProfileMap = new Map(
+    (tradeProfiles ?? []).map((p) => [p.id, p.display_name])
+  );
+  const tradeCastawayMap = new Map(
+    (tradeCastaways ?? []).map((c) => [c.id, c.name])
+  );
+
+  const incomingTrades = trades.filter(
+    (t) => t.receiver_id === user.id && t.status === "pending"
+  );
+  const outgoingTrades = trades.filter(
+    (t) => t.proposer_id === user.id && t.status === "pending"
+  );
+  const pendingTradeCount = incomingTrades.length + outgoingTrades.length;
+
+  // ---------------------------------------------------------------------------
+  // Section resolution — which of waiver / trades / alliance is shown
+  // ---------------------------------------------------------------------------
+  const requestedSection = searchParams.section as MovesSection | undefined;
+  const showAllianceTab = playerHasBeenDrafted;
+  const validSections: MovesSection[] = [
+    "waiver",
+    "trades",
+    ...(showAllianceTab ? (["alliance"] as const) : []),
+  ];
+  // If an ally confirmation is in progress, default to the alliance section.
+  const defaultSection: MovesSection = confirmingAllyId && showAllianceTab ? "alliance" : "waiver";
+  const section: MovesSection =
+    requestedSection && validSections.includes(requestedSection)
+      ? requestedSection
+      : defaultSection;
+
+  const sectionTabs = [
+    { href: `/league/${leagueId}/waiver?section=waiver`, label: "Waiver Wire" },
+    {
+      href: `/league/${leagueId}/waiver?section=trades`,
+      label: "Trades",
+      badge: pendingTradeCount,
+    },
+    ...(showAllianceTab
+      ? [{ href: `/league/${leagueId}/waiver?section=alliance`, label: "Alliance" }]
+      : []),
+  ];
+
   return (
     <AppShell
       title={`${league.name} — Moves`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
         {/* Feedback banners */}
@@ -332,12 +452,46 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
             Alliance created! You&apos;re now allied with {activeAllyCastawayName}.
           </p>
         )}
-        {searchParams.success && searchParams.success !== "ally_created" && (
+        {searchParams.success === "trade_accepted" && (
           <p role="status" className="text-sm bg-green-50 text-green-800 border border-green-200 rounded-md px-3 py-2">
-            Claim submitted successfully.
+            Trade accepted! Rosters have been updated.
           </p>
         )}
+        {searchParams.success === "trade_rejected" && (
+          <p role="status" className="text-sm bg-green-50 text-green-800 border border-green-200 rounded-md px-3 py-2">
+            Trade rejected.
+          </p>
+        )}
+        {searchParams.success === "trade_cancelled" && (
+          <p role="status" className="text-sm bg-green-50 text-green-800 border border-green-200 rounded-md px-3 py-2">
+            Trade cancelled.
+          </p>
+        )}
+        {searchParams.success === "trade_proposed" && (
+          <p role="status" className="text-sm bg-green-50 text-green-800 border border-green-200 rounded-md px-3 py-2">
+            Trade proposal sent!
+          </p>
+        )}
+        {searchParams.success &&
+          ![
+            "ally_created",
+            "trade_accepted",
+            "trade_rejected",
+            "trade_cancelled",
+            "trade_proposed",
+          ].includes(searchParams.success) && (
+            <p role="status" className="text-sm bg-green-50 text-green-800 border border-green-200 rounded-md px-3 py-2">
+              Claim submitted successfully.
+            </p>
+          )}
 
+        <SectionTabs tabs={sectionTabs} active={`/league/${leagueId}/waiver?section=${section}`} />
+
+        {/* ================================================================== */}
+        {/* WAIVER WIRE section                                                 */}
+        {/* ================================================================== */}
+        {section === "waiver" && (
+        <div className="space-y-6">
         {/* Budget bar */}
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-center justify-between mb-2">
@@ -374,12 +528,142 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
             budgetRemaining={budgetRemaining}
           />
         </div>
+        </div>
+        )}
 
-        {/* ------------------------------------------------------------------ */}
-        {/* Alliance section — only shown if player has been drafted            */}
-        {/* ------------------------------------------------------------------ */}
-        {playerHasBeenDrafted && (
-          <div className="border-t border-border pt-6 space-y-4">
+        {/* ================================================================== */}
+        {/* TRADES section                                                     */}
+        {/* ================================================================== */}
+        {section === "trades" && (
+          <div className="space-y-8">
+            {/* Propose a new trade */}
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                New Trade
+              </h2>
+              <TradeProposalWithPlayer
+                leagueId={leagueId}
+                myCastaways={myTradeCastaways}
+                otherPlayers={otherTradePlayers}
+              />
+            </section>
+
+            {/* Incoming trades (you need to accept/reject) */}
+            {incomingTrades.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Trades Received
+                </h2>
+                <div className="space-y-3">
+                  {incomingTrades.map((trade) => (
+                    <div
+                      key={trade.id}
+                      className="rounded-lg border border-border bg-card p-4 space-y-3"
+                    >
+                      <div className="text-sm">
+                        <span className="font-medium">
+                          {tradeProfileMap.get(trade.proposer_id) ?? "Unknown"}
+                        </span>{" "}
+                        wants to trade their{" "}
+                        <span className="font-medium">
+                          {tradeCastawayMap.get(trade.proposer_castaway) ?? "Unknown"}
+                        </span>{" "}
+                        for your{" "}
+                        <span className="font-medium">
+                          {tradeCastawayMap.get(trade.receiver_castaway) ?? "Unknown"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Proposed {new Date(trade.proposed_at).toLocaleDateString()}
+                      </p>
+                      <div className="flex gap-2">
+                        <form action={acceptTradeInLeagueAction}>
+                          <input type="hidden" name="trade_id" value={trade.id} />
+                          <input type="hidden" name="league_id" value={leagueId} />
+                          <SubmitButton
+                            pendingText="Accepting…"
+                            className="rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 transition-colors disabled:opacity-50"
+                          >
+                            Accept
+                          </SubmitButton>
+                        </form>
+                        <form action={rejectTradeInLeagueAction}>
+                          <input type="hidden" name="trade_id" value={trade.id} />
+                          <input type="hidden" name="league_id" value={leagueId} />
+                          <SubmitButton
+                            pendingText="Rejecting…"
+                            className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                          >
+                            Reject
+                          </SubmitButton>
+                        </form>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Outgoing trades (you sent, waiting for response) */}
+            {outgoingTrades.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  Trades Sent
+                </h2>
+                <div className="space-y-3">
+                  {outgoingTrades.map((trade) => (
+                    <div
+                      key={trade.id}
+                      className="rounded-lg border border-border bg-card p-4 space-y-3"
+                    >
+                      <div className="text-sm">
+                        You offered{" "}
+                        <span className="font-medium">
+                          {tradeCastawayMap.get(trade.proposer_castaway) ?? "Unknown"}
+                        </span>{" "}
+                        to{" "}
+                        <span className="font-medium">
+                          {tradeProfileMap.get(trade.receiver_id) ?? "Unknown"}
+                        </span>{" "}
+                        for their{" "}
+                        <span className="font-medium">
+                          {tradeCastawayMap.get(trade.receiver_castaway) ?? "Unknown"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Proposed {new Date(trade.proposed_at).toLocaleDateString()} · Waiting for response
+                      </p>
+                      <form action={cancelTradeAction}>
+                        <input type="hidden" name="trade_id" value={trade.id} />
+                        <input type="hidden" name="league_id" value={leagueId} />
+                        <SubmitButton
+                          pendingText="Cancelling…"
+                          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                        >
+                          Cancel Trade
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {incomingTrades.length === 0 && outgoingTrades.length === 0 && (
+              <div className="rounded-lg border border-dashed border-border p-10 text-center">
+                <p className="text-muted-foreground text-sm">
+                  No active trades. Use the form above to propose one.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ================================================================== */}
+        {/* ALLIANCE section — only shown if player has been drafted            */}
+        {/* ================================================================== */}
+        {section === "alliance" && playerHasBeenDrafted && (
+          <div className="space-y-4">
             <div>
               <h2 className="text-sm font-semibold">Alliance</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -477,7 +761,7 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
                     </div>
                     <div className="flex gap-3">
                       <a
-                        href={`/league/${leagueId}/waiver`}
+                        href={`/league/${leagueId}/waiver?section=alliance`}
                         className="flex-1 text-center rounded border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
                       >
                         Cancel
@@ -535,7 +819,7 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
                             </p>
                           </div>
                           <a
-                            href={`/league/${leagueId}/waiver?ally=${castaway.id}`}
+                            href={`/league/${leagueId}/waiver?ally=${castaway.id}&section=alliance`}
                             className="shrink-0 rounded border border-amber-400 text-amber-700 bg-amber-50 px-3 py-1.5 text-xs font-medium hover:bg-amber-100 transition-colors min-h-[36px] flex items-center"
                             aria-label={`Ally with ${castaway.name}`}
                           >

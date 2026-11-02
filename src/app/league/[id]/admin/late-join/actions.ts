@@ -7,13 +7,15 @@ import { requireLeagueAdmin } from "../helpers";
 export async function assignCastawayAction(formData: FormData) {
   const leagueId = formData.get("league_id") as string;
   const { supabase } = await requireLeagueAdmin(leagueId);
-  const basePath = `/league/${leagueId}/admin/late-join`;
+  // Late-join is now managed under the merged Draft admin page.
+  const pagePath = `/league/${leagueId}/admin/draft`;
+  const basePath = `${pagePath}?section=late-join`;
 
   const playerId = formData.get("player_id") as string;
   const castawayId = formData.get("castaway_id") as string;
 
   if (!playerId || !castawayId) {
-    redirect(`${basePath}?error=Missing+player+or+castaway+selection`);
+    redirect(`${basePath}&error=Missing+player+or+castaway+selection`);
   }
 
   const { data: membership } = await supabase
@@ -23,7 +25,7 @@ export async function assignCastawayAction(formData: FormData) {
     .eq("player_id", playerId)
     .single();
 
-  if (!membership) redirect(`${basePath}?error=Player+is+not+a+member+of+this+league`);
+  if (!membership) redirect(`${basePath}&error=Player+is+not+a+member+of+this+league`);
 
   const { data: existingAssignment } = await supabase
     .from("team_assignments")
@@ -33,7 +35,7 @@ export async function assignCastawayAction(formData: FormData) {
     .limit(1)
     .single();
 
-  if (existingAssignment) redirect(`${basePath}?error=This+castaway+is+already+on+a+team`);
+  if (existingAssignment) redirect(`${basePath}&error=This+castaway+is+already+on+a+team`);
 
   const { data: castaway } = await supabase
     .from("castaways")
@@ -42,8 +44,8 @@ export async function assignCastawayAction(formData: FormData) {
     .eq("league_id", leagueId)
     .single();
 
-  if (!castaway) redirect(`${basePath}?error=Castaway+not+found`);
-  if (castaway.is_eliminated) redirect(`${basePath}?error=Cannot+assign+an+eliminated+castaway`);
+  if (!castaway) redirect(`${basePath}&error=Castaway+not+found`);
+  if (castaway.is_eliminated) redirect(`${basePath}&error=Cannot+assign+an+eliminated+castaway`);
 
   // Get league roster size
   const { data: league } = await supabase
@@ -59,7 +61,7 @@ export async function assignCastawayAction(formData: FormData) {
     .eq("player_id", playerId);
 
   if ((currentRosterCount ?? 0) >= (league?.roster_size ?? 1)) {
-    redirect(`${basePath}?error=Player+has+already+reached+the+roster+size+limit`);
+    redirect(`${basePath}&error=Player+has+already+reached+the+roster+size+limit`);
   }
 
   const { data: latestFinalizedEpisode } = await supabase
@@ -81,8 +83,8 @@ export async function assignCastawayAction(formData: FormData) {
     source: "admin_assign",
   });
 
-  if (error) redirect(`${basePath}?error=Failed+to+assign+castaway`);
+  if (error) redirect(`${basePath}&error=Failed+to+assign+castaway`);
 
-  revalidatePath(basePath);
-  redirect(`${basePath}?success=assigned`);
+  revalidatePath(pagePath);
+  redirect(`${basePath}&success=assigned`);
 }

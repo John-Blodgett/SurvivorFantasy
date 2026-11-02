@@ -4,7 +4,7 @@ import Link from "next/link";
 import { computePlayerScore, computeAllyPoints } from "@/lib/scoring";
 import { computeLeaderboard } from "@/lib/leaderboard";
 import AppShell from "@/components/app-shell";
-import { getAllLeagueNavLinks } from "@/components/league-nav";
+import { buildLeagueNav } from "@/components/league-nav";
 import type {
   TeamAssignment,
   EpisodeEvent,
@@ -213,7 +213,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
       title={`${league.name} — Leaderboard`}
       backHref="/dashboard"
       backLabel="Dashboard"
-      navLinks={getAllLeagueNavLinks(leagueId, isAdmin)}
+      navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         <p className="text-sm text-muted-foreground">
