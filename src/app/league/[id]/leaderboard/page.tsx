@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { computePlayerScore } from "@/lib/scoring";
+import { computePlayerScore, computeAllyPoints } from "@/lib/scoring";
 import { computeLeaderboard } from "@/lib/leaderboard";
 import AppShell from "@/components/app-shell";
 import { getAllLeagueNavLinks } from "@/components/league-nav";
@@ -128,7 +128,45 @@ export default async function LeaderboardPage({ params }: PageProps) {
     playerCastaways.set(a.player_id, list);
   }
 
-  // Compute score for each member
+  // Fetch all active alliances for this league
+  const { data: allAlliesRaw } = await supabase
+    .from("league_allies")
+    .select("player_id, castaway_id, points_from_episode")
+    .eq("league_id", leagueId)
+    .is("ended_at", null);
+
+  // Build a map of castaway_id → CastawayBreakdown (across all owners)
+  // so alliance points can be looked up regardless of current owner.
+  // We compute each player's score and collect castaway breakdowns.
+  const castawayBreakdownMap = new Map<string, import("@/lib/scoring").CastawayBreakdown>();
+  for (const member of members ?? []) {
+    const playerId = member.player_id;
+    const assignments: TeamAssignment[] = (allAssignmentsRaw ?? [])
+      .filter((a) => a.player_id === playerId)
+      .map((a) => ({
+        castaway_id: a.castaway_id,
+        points_from_episode: a.points_from_episode,
+        source: a.source as TeamAssignment["source"],
+      }));
+    const result = computePlayerScore(
+      playerId, assignments, allEpisodeEvents, eliminatedCastaways,
+      finalizedEpisodes, league.consolation_points, []
+    );
+    for (const cb of result.castaways) {
+      castawayBreakdownMap.set(cb.castaway_id, cb);
+    }
+  }
+
+  // Build alliance info: player_id → { castaway_id, castaway_name, points_from_episode, ally_pts }
+  const playerAllyInfo = new Map<string, { castaway_name: string; ally_pts: number }>();
+  for (const ally of allAlliesRaw ?? []) {
+    const breakdown = castawayBreakdownMap.get(ally.castaway_id);
+    const allyPts = breakdown ? computeAllyPoints(breakdown, ally.points_from_episode) : 0;
+    const castawayName = castawayMap.get(ally.castaway_id)?.name ?? "Unknown";
+    playerAllyInfo.set(ally.player_id, { castaway_name: castawayName, ally_pts: allyPts });
+  }
+
+  // Compute score for each member (direct score only; ally points added separately)
   const playerScores = (members ?? []).map((member) => {
     const playerId = member.player_id;
     const profileData = member.profiles as unknown as { display_name: string } | null;
@@ -159,10 +197,12 @@ export default async function LeaderboardPage({ params }: PageProps) {
       challengeSubs
     );
 
+    const allyPts = playerAllyInfo.get(playerId)?.ally_pts ?? 0;
+
     return {
       player_id: playerId,
       display_name: displayName,
-      total: scoreResult.total,
+      total: scoreResult.total + allyPts,
     };
   });
 
@@ -261,6 +301,12 @@ export default async function LeaderboardPage({ params }: PageProps) {
                               ))}
                             </span>
                           )}
+                          {/* Alliance indicator on small screens */}
+                          {playerAllyInfo.has(entry.player_id) && (
+                            <span className="mt-1 lg:hidden inline-flex items-center gap-1 text-xs text-amber-700 font-normal">
+                              🤝 Allied: {playerAllyInfo.get(entry.player_id)!.castaway_name}
+                            </span>
+                          )}
                         </Link>
                       </td>
                       <td className="hidden lg:table-cell px-3 sm:px-4 py-3">
@@ -289,6 +335,12 @@ export default async function LeaderboardPage({ params }: PageProps) {
                               </span>
                             ))}
                           </div>
+                        )}
+                        {/* Alliance indicator on desktop */}
+                        {playerAllyInfo.has(entry.player_id) && (
+                          <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                            🤝 Allied: {playerAllyInfo.get(entry.player_id)!.castaway_name}
+                          </span>
                         )}
                       </td>
                       <td className="px-3 sm:px-4 py-3 text-right tabular-nums font-semibold">

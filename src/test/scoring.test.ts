@@ -385,3 +385,107 @@ describe("buildBatchEvents", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Alliance scoring: computeAllyPoints
+// ---------------------------------------------------------------------------
+
+import { computeAllyPoints, type CastawayBreakdown } from "@/lib/scoring";
+
+describe("computeAllyPoints", () => {
+  function makeBreakdown(
+    episodePoints: Record<number, number>,
+    consolationPoints = 0
+  ): CastawayBreakdown {
+    const total =
+      Object.values(episodePoints).reduce((s, p) => s + p, 0) + consolationPoints;
+    return {
+      castaway_id: "castaway-1",
+      episode_points: episodePoints,
+      consolation_points: consolationPoints,
+      total,
+    };
+  }
+
+  it("returns ceil(total / 2) for an even total", () => {
+    // 4 pts → ceil(4/2) = 2
+    const breakdown = makeBreakdown({ 5: 4 });
+    expect(computeAllyPoints(breakdown, 5)).toBe(2);
+  });
+
+  it("rounds up for odd totals — ceil(3/2) = 2", () => {
+    const breakdown = makeBreakdown({ 5: 3 });
+    expect(computeAllyPoints(breakdown, 5)).toBe(2);
+  });
+
+  it("rounds up for odd totals — ceil(1/2) = 1", () => {
+    const breakdown = makeBreakdown({ 5: 1 });
+    expect(computeAllyPoints(breakdown, 5)).toBe(1);
+  });
+
+  it("excludes episodes before points_from_episode", () => {
+    // Episodes 3 and 4 are before the ally started (from ep 5)
+    const breakdown = makeBreakdown({ 3: 10, 4: 8, 5: 6, 6: 4 });
+    // Only eps 5+6 count: 6+4 = 10 → ceil(10/2) = 5
+    expect(computeAllyPoints(breakdown, 5)).toBe(5);
+  });
+
+  it("returns 0 when no episodes are within range", () => {
+    const breakdown = makeBreakdown({ 1: 10, 2: 10 });
+    expect(computeAllyPoints(breakdown, 5)).toBe(0);
+  });
+
+  it("includes consolation points in the calculation", () => {
+    // Default consolation = 1 → ceil(1/2) = 1
+    const breakdown = makeBreakdown({}, 1);
+    expect(computeAllyPoints(breakdown, 5)).toBe(1);
+  });
+
+  it("sums consolation and episode points before halving", () => {
+    // 4 episode pts + 3 consolation = 7 → ceil(7/2) = 4
+    const breakdown = makeBreakdown({ 6: 4 }, 3);
+    expect(computeAllyPoints(breakdown, 5)).toBe(4);
+  });
+
+  it("handles a castaway with no points at all", () => {
+    const breakdown = makeBreakdown({});
+    expect(computeAllyPoints(breakdown, 1)).toBe(0);
+  });
+
+  it("includes the exact points_from_episode episode", () => {
+    // points_from_episode = 5 means ep 5 IS included
+    const breakdown = makeBreakdown({ 5: 2 });
+    expect(computeAllyPoints(breakdown, 5)).toBe(1);
+  });
+
+  // Property-based: ally always earns <= full castaway points
+  it("ally points never exceed the full castaway episode points (since it is rounded up)", () => {
+    fc.assert(
+      fc.property(
+        fc.dictionary(
+          fc.integer({ min: 1, max: 10 }).map(String),
+          fc.integer({ min: 0, max: 100 })
+        ),
+        fc.integer({ min: 0, max: 50 }),
+        fc.integer({ min: 1, max: 10 }),
+        (episodePointsRaw, consolation, pointsFromEpisode) => {
+          const episodePoints: Record<number, number> = {};
+          for (const [k, v] of Object.entries(episodePointsRaw)) {
+            episodePoints[Number(k)] = v;
+          }
+          const breakdown = makeBreakdown(episodePoints, consolation);
+          const allyPts = computeAllyPoints(breakdown, pointsFromEpisode);
+
+          const eligibleEpTotal = Object.entries(episodePoints)
+            .filter(([k]) => Number(k) >= pointsFromEpisode)
+            .reduce((s, [, v]) => s + v, 0);
+          const rawTotal = eligibleEpTotal + consolation;
+
+          expect(allyPts).toBe(Math.ceil(rawTotal / 2));
+          return true;
+        }
+      ),
+      { numRuns: 50 }
+    );
+  });
+});

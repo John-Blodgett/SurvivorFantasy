@@ -135,6 +135,15 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
     players.map((p) => [p.id, p.name])
   );
 
+  // Fetch all alliances (active + ended) so we can show ally points in the log
+  // including those earned before an alliance ended.
+  const { data: allAlliesAllTime } = await supabase
+    .from("league_allies")
+    .select("player_id, castaway_id, points_from_episode, ended_at")
+    .eq("league_id", leagueId);
+
+  const allAlliesForLog = allAlliesAllTime ?? [];
+
   // Build the scoring log with running totals per player
   const playerTotals = new Map<string, number>();
 
@@ -163,6 +172,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       player_name: playerId ? (profileMap.get(playerId) ?? "Unknown") : "Unassigned",
       player_id: playerId,
       running_total: playerId ? playerTotals.get(playerId)! : null,
+      is_alliance: false,
     };
   });
 
@@ -190,7 +200,63 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
         player_name: profileMap.get(playerId) ?? "Unknown",
         player_id: playerId,
         running_total: playerTotals.get(playerId)!,
+        is_alliance: false,
       });
+    }
+  }
+
+  // Add synthetic alliance rows: per ally per episode >= points_from_episode
+  // Build a map of castaway_id → per-episode points breakdown (across all finalized events)
+  if (!playerFilter || allAlliesForLog.some((a) => a.player_id === playerFilter)) {
+    // Group episode events by castaway_id and episode
+    const castawayEpisodePtsMap = new Map<string, Map<number, number>>();
+    for (const event of (eventsRaw ?? []) as Array<Record<string, unknown>>) {
+      const ep = event.episodes as Record<string, unknown>;
+      const epNum = ep.number as number;
+      const cId = event.castaway_id as string;
+      const pts = event.points as number;
+      if (!castawayEpisodePtsMap.has(cId)) castawayEpisodePtsMap.set(cId, new Map());
+      const epMap = castawayEpisodePtsMap.get(cId)!;
+      epMap.set(epNum, (epMap.get(epNum) ?? 0) + pts);
+    }
+
+    for (const ally of allAlliesForLog) {
+      // Filter by player if a player filter is set
+      if (playerFilter && ally.player_id !== playerFilter) continue;
+      if (castawayFilter) continue; // ally rows don't belong to a castaway filter
+
+      const castawayEpPts = castawayEpisodePtsMap.get(ally.castaway_id);
+      if (!castawayEpPts) continue;
+
+      const castawayName = castawayMap.get(ally.castaway_id)?.name ?? "Unknown";
+      const allyPlayerName = profileMap.get(ally.player_id) ?? "Unknown";
+
+      for (const [epNum, castawayPts] of Array.from(castawayEpPts.entries())) {
+        if (episodeFilter && epNum !== episodeFilter) continue;
+        if (epNum < ally.points_from_episode) continue;
+
+        // Ally earns ceil(half) of the castaway's episode points for episodes
+        // at or after points_from_episode (filtered above).
+        const allyPtsThisEp = Math.ceil(castawayPts / 2);
+        if (allyPtsThisEp === 0) continue;
+
+        const current = playerTotals.get(ally.player_id) ?? 0;
+        playerTotals.set(ally.player_id, current + allyPtsThisEp);
+
+        events.push({
+          id: `ally-${ally.player_id}-${ally.castaway_id}-${epNum}`,
+          episode_number: epNum,
+          castaway_id: ally.castaway_id,
+          castaway_name: castawayName,
+          castaway_photo: castawayMap.get(ally.castaway_id)?.photo_url ?? null,
+          rule_name: `🤝 Alliance · ${castawayName}`,
+          points: allyPtsThisEp,
+          player_name: allyPlayerName,
+          player_id: ally.player_id,
+          running_total: playerTotals.get(ally.player_id)!,
+          is_alliance: true,
+        } as typeof events[0] & { is_alliance?: boolean });
+      }
     }
   }
 
@@ -278,6 +344,10 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                     </span>
                   </li>
                 )}
+                <li className="flex items-center justify-between py-2 text-sm">
+                  <span className="text-foreground">🤝 Alliance (½ of ally castaway&apos;s episode pts, rounded up)</span>
+                  <span className="tabular-nums font-semibold text-amber-700">½ ↑</span>
+                </li>
               </ul>
             </div>
           </details>
@@ -428,7 +498,11 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
               {events.map((event) => (
                 <div
                   key={event.id}
-                  className="rounded-lg border border-border bg-card px-3 py-2.5 flex items-center gap-3"
+                  className={`rounded-lg border bg-card px-3 py-2.5 flex items-center gap-3 ${
+                    (event as { is_alliance?: boolean }).is_alliance
+                      ? "border-amber-200 bg-amber-50/50"
+                      : "border-border"
+                  }`}
                 >
                   {/* Avatar / icon */}
                   {event.castaway_id ? (
@@ -506,7 +580,11 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                   {events.map((event) => (
                     <tr
                       key={event.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                      className={`border-b border-border last:border-0 transition-colors ${
+                        (event as { is_alliance?: boolean }).is_alliance
+                          ? "bg-amber-50/40 hover:bg-amber-50/70"
+                          : "hover:bg-muted/30"
+                      }`}
                     >
                       <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
                         {event.episode_number > 0 ? event.episode_number : "—"}

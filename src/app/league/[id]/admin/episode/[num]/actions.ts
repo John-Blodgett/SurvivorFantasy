@@ -654,6 +654,22 @@ export async function eliminateCastawaysAction(formData: FormData) {
     }
   }
 
+  // End any active alliances for castaways eliminated this episode.
+  // Allied players are now free to pick a new ally.
+  const { data: activeAllies } = await supabase
+    .from("league_allies")
+    .select("id")
+    .eq("league_id", leagueId)
+    .in("castaway_id", castawayIds)
+    .is("ended_at", null);
+
+  for (const ally of activeAllies ?? []) {
+    await supabase.rpc("end_ally", {
+      p_ally_id: ally.id,
+      p_reason: "castaway_eliminated",
+    });
+  }
+
   revalidatePath(basePath);
   revalidatePath(`/league/${leagueId}/admin/castaways`);
   redirect(`${basePath}?success=finalized`);

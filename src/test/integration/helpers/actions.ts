@@ -1281,3 +1281,175 @@ export async function gradeSubmission(
     .update({ is_correct: isCorrect })
     .eq("id", submissionId);
 }
+
+// ---------------------------------------------------------------------------
+// Alliance Actions
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates an alliance for a player with a specific castaway.
+ * Replicates the createAllyAction server action logic using the admin client.
+ *
+ * Requirements: Alliance feature
+ */
+export async function createAlly(
+  leagueId: string,
+  playerId: string,
+  castawayId: string
+): Promise<{ allyId?: string; error?: string }> {
+  const supabase = getAdminClient();
+
+  // Player must have been drafted
+  const { data: playerAssignments } = await supabase
+    .from("team_assignments")
+    .select("castaway_id")
+    .eq("league_id", leagueId)
+    .eq("player_id", playerId);
+
+  if (!playerAssignments || playerAssignments.length === 0) {
+    return { error: "Player must have been drafted before creating an alliance." };
+  }
+
+  // Player must have all castaways eliminated
+  const playerCastawayIds = playerAssignments.map((a) => a.castaway_id);
+  const { data: activeCastaways } = await supabase
+    .from("castaways")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("is_eliminated", false)
+    .in("id", playerCastawayIds);
+
+  if ((activeCastaways ?? []).length > 0) {
+    return {
+      error: "Player can only ally after all their castaways are eliminated.",
+    };
+  }
+
+  // Target castaway must be active
+  const { data: targetCastaway } = await supabase
+    .from("castaways")
+    .select("id, name, is_eliminated")
+    .eq("id", castawayId)
+    .eq("league_id", leagueId)
+    .single();
+
+  if (!targetCastaway) {
+    return { error: "Castaway not found." };
+  }
+
+  if (targetCastaway.is_eliminated) {
+    return { error: `${targetCastaway.name} has been eliminated and cannot be allied with.` };
+  }
+
+  // Target castaway must be owned by another player
+  const { data: ownership } = await supabase
+    .from("team_assignments")
+    .select("player_id")
+    .eq("league_id", leagueId)
+    .eq("castaway_id", castawayId)
+    .single();
+
+  if (!ownership) {
+    return { error: "Castaway is not on any team. Can only ally with owned castaways." };
+  }
+
+  if (ownership.player_id === playerId) {
+    return { error: "Cannot ally with your own castaway." };
+  }
+
+  // No existing active alliance
+  const { data: existing } = await supabase
+    .from("league_allies")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("player_id", playerId)
+    .is("ended_at", null)
+    .single();
+
+  if (existing) {
+    return { error: "Player already has an active alliance." };
+  }
+
+  // Determine points_from_episode
+  const { data: latestEpisode } = await supabase
+    .from("episodes")
+    .select("number")
+    .eq("league_id", leagueId)
+    .eq("is_finalized", true)
+    .order("number", { ascending: false })
+    .limit(1)
+    .single();
+
+  const pointsFromEpisode = (latestEpisode?.number ?? 0) + 1;
+
+  // Insert
+  const { data: ally, error } = await supabase
+    .from("league_allies")
+    .insert({
+      league_id: leagueId,
+      player_id: playerId,
+      castaway_id: castawayId,
+      points_from_episode: pointsFromEpisode,
+    })
+    .select("id")
+    .single();
+
+  if (error || !ally) {
+    return { error: `Failed to create alliance: ${error?.message}` };
+  }
+
+  return { allyId: ally.id };
+}
+
+/**
+ * Ends an active alliance (simulates admin_reset or elimination pathway
+ * directly via admin client).
+ */
+export async function endAlly(
+  allyId: string,
+  reason: "castaway_eliminated" | "admin_reset"
+): Promise<{ error?: string }> {
+  const supabase = getAdminClient();
+
+  const { error } = await supabase
+    .from("league_allies")
+    .update({ ended_at: new Date().toISOString(), ended_reason: reason })
+    .eq("id", allyId)
+    .is("ended_at", null);
+
+  if (error) {
+    return { error: `Failed to end alliance: ${error.message}` };
+  }
+
+  return {};
+}
+
+/**
+ * Eliminates a castaway AND ends any active alliances for that castaway,
+ * mirroring the full eliminateCastawaysAction flow.
+ */
+export async function eliminateCastawayWithAllyCleanup(
+  leagueId: string,
+  castawayId: string,
+  episodeNum: number
+): Promise<void> {
+  const supabase = getAdminClient();
+
+  // Mark castaway eliminated
+  await supabase
+    .from("castaways")
+    .update({ is_eliminated: true, eliminated_episode: episodeNum })
+    .eq("id", castawayId);
+
+  // End active alliances for this castaway
+  const { data: activeAllies } = await supabase
+    .from("league_allies")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("castaway_id", castawayId)
+    .is("ended_at", null);
+
+  for (const ally of activeAllies ?? []) {
+    await endAlly(ally.id, "castaway_eliminated");
+  }
+}

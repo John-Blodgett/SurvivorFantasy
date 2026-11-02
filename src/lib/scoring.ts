@@ -5,6 +5,12 @@
  * Points are attributed to the player who owned the castaway when the
  * episode was finalized (stored as player_id on episode_events).
  * Trades do not retroactively move points between players.
+ *
+ * Alliance feature:
+ * A player whose castaways are all eliminated can ally with an active
+ * castaway and earn ceil(castaway_episode_pts / 2) per finalized episode.
+ * Use computeAllyPoints() to calculate the ally's share from a castaway
+ * breakdown.
  */
 
 // ---------------------------------------------------------------------------
@@ -64,6 +70,21 @@ export interface FinalizedEpisode {
 export interface ChallengeSubmission {
   points: number;
   is_correct: boolean | null;
+}
+
+// ---------------------------------------------------------------------------
+// Alliance types
+// ---------------------------------------------------------------------------
+
+/** A player's active alliance with a specific castaway. */
+export interface AllyInfo {
+  /** The castaway the player is allied with. */
+  castaway_id: string;
+  /**
+   * The first episode number from which ally points are earned.
+   * Set to (latest_finalized_episode + 1) at the time the alliance was created.
+   */
+  points_from_episode: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,4 +255,40 @@ export function computePlayerScore(
     challenge_points: challengePoints,
     total,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Alliance scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Computes the points an allied player earns from a castaway's breakdown.
+ *
+ * Rules:
+ * - Only episodes >= points_from_episode are counted (no retroactive benefit).
+ * - Points are rounded UP: ceil(total / 2).
+ * - Challenge points are NOT included (those are personal to the original player).
+ * - Consolation points ARE included (ceil(1/2) = 1 for default leagues, which
+ *   is intentional — allies get a small consolation share too).
+ *
+ * @param castawayBreakdown  - The full CastawayBreakdown for the allied castaway
+ *                             (taken from the current owner's computePlayerScore result)
+ * @param pointsFromEpisode  - First episode the ally is eligible to earn points from
+ */
+export function computeAllyPoints(
+  castawayBreakdown: CastawayBreakdown,
+  pointsFromEpisode: number
+): number {
+  let episodeTotal = 0;
+  for (const [epNum, pts] of Object.entries(castawayBreakdown.episode_points)) {
+    if (Number(epNum) >= pointsFromEpisode) {
+      episodeTotal += pts;
+    }
+  }
+  // Consolation points are already aggregated on the breakdown.
+  // They apply only to episodes after elimination, so we always include them
+  // (the pointsFromEpisode guard for per-episode breakdowns handles the cutoff
+  // for event points; consolation is a separate aggregate).
+  const rawTotal = episodeTotal + castawayBreakdown.consolation_points;
+  return Math.ceil(rawTotal / 2);
 }

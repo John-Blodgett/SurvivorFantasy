@@ -272,3 +272,155 @@ export async function editWaiverClaimAction(formData: FormData) {
 
   revalidatePath(`/league/${leagueId}/waiver`);
 }
+
+// ---------------------------------------------------------------------------
+// Alliance actions
+// ---------------------------------------------------------------------------
+
+/**
+ * Create an alliance with an active castaway.
+ * Requirements: player must have all castaways eliminated, castaway must
+ * be active (not eliminated), no active alliance already exists for this player.
+ */
+export async function createAllyAction(formData: FormData) {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/");
+
+  const leagueId = formData.get("league_id") as string;
+  const castawayId = formData.get("castaway_id") as string;
+  const basePath = `/league/${leagueId}/waiver`;
+
+  if (!leagueId || !castawayId) {
+    redirect(`${basePath}?error=${encodeURIComponent("Missing required fields.")}`);
+  }
+
+  // Verify membership
+  const { data: membership } = await supabase
+    .from("league_members")
+    .select("player_id")
+    .eq("league_id", leagueId)
+    .eq("player_id", user.id)
+    .single();
+
+  if (!membership) redirect("/dashboard");
+
+  // Player must have all castaways eliminated (or no castaways assigned — late joiner with all elim)
+  const { data: playerAssignments } = await supabase
+    .from("team_assignments")
+    .select("castaway_id")
+    .eq("league_id", leagueId)
+    .eq("player_id", user.id);
+
+  if ((playerAssignments ?? []).length === 0) {
+    redirect(`${basePath}?error=${encodeURIComponent("You must have been drafted before creating an alliance.")}`);
+  }
+
+  const playerCastawayIds = (playerAssignments ?? []).map((a) => a.castaway_id);
+
+  const { data: activeCastaways } = await supabase
+    .from("castaways")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("is_eliminated", false)
+    .in("id", playerCastawayIds);
+
+  if ((activeCastaways ?? []).length > 0) {
+    redirect(
+      `${basePath}?error=${encodeURIComponent(
+        "You can only ally with a castaway after all your own castaways are eliminated."
+      )}`
+    );
+  }
+
+  // Target castaway must be active (not eliminated)
+  const { data: targetCastaway } = await supabase
+    .from("castaways")
+    .select("id, name, is_eliminated")
+    .eq("id", castawayId)
+    .eq("league_id", leagueId)
+    .single();
+
+  if (!targetCastaway) {
+    redirect(`${basePath}?error=${encodeURIComponent("Castaway not found.")}`);
+  }
+
+  if (targetCastaway.is_eliminated) {
+    redirect(
+      `${basePath}?error=${encodeURIComponent(
+        `${targetCastaway.name} has been eliminated and cannot be allied with.`
+      )}`
+    );
+  }
+
+  // Target castaway must be owned (can't ally with a free agent on the waiver wire)
+  const { data: castawayOwnership } = await supabase
+    .from("team_assignments")
+    .select("player_id")
+    .eq("league_id", leagueId)
+    .eq("castaway_id", castawayId)
+    .single();
+
+  if (!castawayOwnership) {
+    redirect(
+      `${basePath}?error=${encodeURIComponent(
+        "That castaway is not on any team. You can only ally with owned castaways."
+      )}`
+    );
+  }
+
+  // Player cannot ally with their own castaway (shouldn't happen due to elimination check, but be safe)
+  if (castawayOwnership.player_id === user.id) {
+    redirect(`${basePath}?error=${encodeURIComponent("You cannot ally with your own castaway.")}`);
+  }
+
+  // Check for existing active alliance (partial unique index handles DB enforcement,
+  // but give a clean error message here)
+  const { data: existingAlly } = await supabase
+    .from("league_allies")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("player_id", user.id)
+    .is("ended_at", null)
+    .single();
+
+  if (existingAlly) {
+    redirect(
+      `${basePath}?error=${encodeURIComponent(
+        "You already have an active alliance. It ends when your ally castaway is eliminated."
+      )}`
+    );
+  }
+
+  // Determine points_from_episode: latest finalized episode + 1 (or 1 if none yet)
+  const { data: latestEpisode } = await supabase
+    .from("episodes")
+    .select("number")
+    .eq("league_id", leagueId)
+    .eq("is_finalized", true)
+    .order("number", { ascending: false })
+    .limit(1)
+    .single();
+
+  const pointsFromEpisode = (latestEpisode?.number ?? 0) + 1;
+
+  // Insert the alliance
+  const { error } = await supabase.from("league_allies").insert({
+    league_id: leagueId,
+    player_id: user.id,
+    castaway_id: castawayId,
+    points_from_episode: pointsFromEpisode,
+  });
+
+  if (error) {
+    redirect(
+      `${basePath}?error=${encodeURIComponent("Failed to create alliance. Please try again.")}`
+    );
+  }
+
+  revalidatePath(basePath);
+  redirect(`${basePath}?success=ally_created`);
+}

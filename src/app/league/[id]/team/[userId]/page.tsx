@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { computePlayerScore } from "@/lib/scoring";
+import { computePlayerScore, computeAllyPoints } from "@/lib/scoring";
 import type {
   TeamAssignment,
   EpisodeEvent,
@@ -172,10 +172,90 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
     (id) => castawayMap.get(id)?.is_eliminated
   );
 
+  // Fetch the target player's active alliance (if any)
+  const { data: activeAlly } = await supabase
+    .from("league_allies")
+    .select("id, castaway_id, points_from_episode, created_at")
+    .eq("league_id", leagueId)
+    .eq("player_id", targetUserId)
+    .is("ended_at", null)
+    .single();
+
+  // Fetch how many players are allied with each castaway on this team
+  const teamCastawayIdSet = new Set(assignments.map((a) => a.castaway_id));
+  const { data: allyCountsRaw } = await supabase
+    .from("league_allies")
+    .select("castaway_id")
+    .eq("league_id", leagueId)
+    .is("ended_at", null)
+    .in(
+      "castaway_id",
+      teamCastawayIdSet.size > 0 ? Array.from(teamCastawayIdSet) : ["__none__"]
+    );
+
+  const allyCounts = new Map<string, number>();
+  for (const row of allyCountsRaw ?? []) {
+    allyCounts.set(row.castaway_id, (allyCounts.get(row.castaway_id) ?? 0) + 1);
+  }
+
+  // Compute ally points if the target player has an active alliance
+  let allyPoints = 0;
+  let allyCastawayName = "";
+  let allyOwnerName = "";
+  if (activeAlly) {
+    const allyCastaway = allCastaways.find((c) => c.id === activeAlly.castaway_id);
+    allyCastawayName = allyCastaway?.name ?? "Unknown";
+
+    // Find the current owner of the ally castaway
+    const { data: allyOwnership } = await supabase
+      .from("team_assignments")
+      .select("player_id")
+      .eq("league_id", leagueId)
+      .eq("castaway_id", activeAlly.castaway_id)
+      .single();
+
+    if (allyOwnership) {
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("display_name")
+        .eq("id", allyOwnership.player_id)
+        .single();
+      allyOwnerName = ownerProfile?.display_name ?? "Unknown";
+
+      // Build the allied castaway's per-episode breakdown from its episode events
+      const castawayEventBreakdown: { [ep: number]: number } = {};
+      for (const event of allEpisodeEvents) {
+        if (event.castaway_id !== activeAlly.castaway_id) continue;
+        if (!event.player_id) continue;
+        castawayEventBreakdown[event.episode_number] =
+          (castawayEventBreakdown[event.episode_number] ?? 0) + event.points;
+      }
+
+      // Compute consolation for this castaway
+      const castawayInfo = allCastaways.find((c) => c.id === activeAlly.castaway_id);
+      let consolation = 0;
+      if (castawayInfo?.is_eliminated && castawayInfo.eliminated_episode !== null) {
+        const eligibleEps = finalizedEpisodes.filter(
+          (ep) => ep.number > castawayInfo.eliminated_episode!
+        );
+        consolation = league.consolation_points * eligibleEps.length;
+      }
+
+      const breakdown = {
+        castaway_id: activeAlly.castaway_id,
+        episode_points: castawayEventBreakdown,
+        consolation_points: consolation,
+        total:
+          Object.values(castawayEventBreakdown).reduce((s, p) => s + p, 0) + consolation,
+      };
+      allyPoints = computeAllyPoints(breakdown, activeAlly.points_from_episode);
+    }
+  }
+
+  // Fetch the current user's team assignments for trade proposal (only if viewing another player)
   const isOwnTeam = user.id === targetUserId;
   const displayName = targetProfile?.display_name ?? "Unknown Player";
 
-  // Fetch the current user's team assignments for trade proposal (only if viewing another player)
   let myActiveCastaways: { id: string; name: string; is_eliminated: boolean }[] = [];
   if (!isOwnTeam) {
     const { data: myAssignments } = await supabase
@@ -282,6 +362,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
                         episodeNumbers={episodeNumbers}
                         isEliminated={false}
                         consolationPointsPerEpisode={league.consolation_points}
+                        allyCount={allyCounts.get(castawayId) ?? 0}
                       />
                     );
                   })}
@@ -312,6 +393,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
                         episodeNumbers={episodeNumbers}
                         isEliminated={true}
                         consolationPointsPerEpisode={league.consolation_points}
+                        allyCount={0}
                       />
                     );
                   })}
@@ -365,6 +447,32 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
                 </section>
               );
             })()}
+
+            {/* Alliance section */}
+            {activeAlly && (
+              <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🤝</span>
+                    <span className="text-sm font-semibold text-amber-900">Alliance</span>
+                  </div>
+                  {allyPoints > 0 && (
+                    <span className="tabular-nums font-bold text-sm text-amber-800">
+                      +{allyPoints} pts
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-amber-900">
+                  Allied with <strong>{allyCastawayName}</strong>
+                  {allyOwnerName && (
+                    <span className="text-amber-700"> (owned by {allyOwnerName})</span>
+                  )}
+                </p>
+                <p className="text-xs text-amber-700">
+                  Earning from Ep. {activeAlly.points_from_episode} onward &middot; Locked in until {allyCastawayName} is eliminated
+                </p>
+              </section>
+            )}
 
             {/* Challenge points summary */}
             {scoreBreakdown.challenge_points > 0 && (
@@ -429,6 +537,7 @@ interface CastawayBreakdownCardProps {
   episodeNumbers: number[];
   isEliminated: boolean;
   consolationPointsPerEpisode: number;
+  allyCount: number;
 }
 
 function CastawayBreakdownCard({
@@ -438,6 +547,7 @@ function CastawayBreakdownCard({
   episodeNumbers,
   isEliminated,
   consolationPointsPerEpisode,
+  allyCount,
 }: CastawayBreakdownCardProps) {
   const total = breakdown?.total ?? 0;
   const episodePoints = breakdown?.episode_points ?? {};
@@ -499,6 +609,11 @@ function CastawayBreakdownCard({
           </div>
           {metaLabel && (
             <p className="text-xs text-muted-foreground mt-0.5">{metaLabel}</p>
+          )}
+          {allyCount > 0 && (
+            <p className="text-xs text-amber-700 mt-0.5">
+              🤝 {allyCount} player{allyCount !== 1 ? "s" : ""} allied with {castaway.name}
+            </p>
           )}
         </div>
 

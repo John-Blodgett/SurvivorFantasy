@@ -8,7 +8,7 @@ export function getLeagueNavLinks(leagueId: string) {
     { href: `/league/${leagueId}/challenges`, label: "Challenges" },
     { href: `/league/${leagueId}/draft`, label: "Draft" },
     { href: `/league/${leagueId}/trades`, label: "Trades" },
-    { href: `/league/${leagueId}/waiver`, label: "Waiver Wire" },
+    { href: `/league/${leagueId}/waiver`, label: "Moves" },
     { href: `/league/${leagueId}/transactions`, label: "Transactions" },
   ];
 }

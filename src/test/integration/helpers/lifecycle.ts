@@ -57,6 +57,9 @@ export async function cleanup(): Promise<void> {
   // 3. waiver_claims
   await admin.from("waiver_claims").delete().in("league_id", leagueIds);
 
+  // 3b. league_allies
+  await admin.from("league_allies").delete().in("league_id", leagueIds);
+
   // 4. episode_events
   const { data: episodes } = await admin
     .from("episodes")

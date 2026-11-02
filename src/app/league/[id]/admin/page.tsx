@@ -58,6 +58,7 @@ export default async function AdminHubPage({ params }: PageProps) {
     { href: `/league/${leagueId}/admin/episode/${scoreEpisodeNum}`, label: "Score Episode", description: `Score episode ${scoreEpisodeNum}` },
     { href: `/league/${leagueId}/admin/waiver`, label: "Waiver Wire", description: "Configure schedule and process claims" },
     { href: `/league/${leagueId}/admin/late-join`, label: "Late-Join", description: "Assign castaways to late-joining players" },
+    { href: `/league/${leagueId}/admin/allies`, label: "Alliances", description: "View and manage active player alliances" },
   ];
 
   return (
