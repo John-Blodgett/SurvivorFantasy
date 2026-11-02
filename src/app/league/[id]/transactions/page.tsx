@@ -8,7 +8,7 @@ interface PageProps {
 }
 
 interface Transaction {
-  type: "draft" | "trade" | "waiver";
+  type: "draft" | "trade" | "waiver" | "alliance";
   date: string;
   description: string;
   detail: string | null;
@@ -68,6 +68,13 @@ export default async function TransactionsPage({ params }: PageProps) {
     .eq("status", "won")
     .order("processed_at", { ascending: true });
 
+  // Fetch alliances (both active and ended) for the transaction log
+  const { data: alliesRaw } = await supabase
+    .from("league_allies")
+    .select("player_id, castaway_id, created_at, ended_at, ended_reason")
+    .eq("league_id", leagueId)
+    .order("created_at", { ascending: true });
+
   // Gather all player and castaway IDs for name lookups
   const playerIds = new Set<string>();
   const castawayIds = new Set<string>();
@@ -86,6 +93,10 @@ export default async function TransactionsPage({ params }: PageProps) {
     playerIds.add(w.player_id);
     castawayIds.add(w.castaway_id);
     castawayIds.add(w.drop_castaway_id);
+  }
+  for (const a of alliesRaw ?? []) {
+    playerIds.add(a.player_id);
+    castawayIds.add(a.castaway_id);
   }
 
   const playerArr = Array.from(playerIds);
@@ -136,6 +147,31 @@ export default async function TransactionsPage({ params }: PageProps) {
     });
   }
 
+  for (const a of alliesRaw ?? []) {
+    // Alliance formed
+    transactions.push({
+      type: "alliance",
+      date: a.created_at,
+      description: `${pName(a.player_id)} allied with ${cName(a.castaway_id)}`,
+      detail: null,
+    });
+    // Alliance ended (only if it has ended)
+    if (a.ended_at) {
+      const reason =
+        a.ended_reason === "castaway_eliminated"
+          ? `${cName(a.castaway_id)} eliminated`
+          : a.ended_reason === "admin_reset"
+          ? "ended by admin"
+          : "ended";
+      transactions.push({
+        type: "alliance",
+        date: a.ended_at,
+        description: `${pName(a.player_id)}'s alliance with ${cName(a.castaway_id)} ended`,
+        detail: reason,
+      });
+    }
+  }
+
   // Sort most recent first
   transactions.sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -145,12 +181,14 @@ export default async function TransactionsPage({ params }: PageProps) {
     draft: "Draft",
     trade: "Trade",
     waiver: "Waiver",
+    alliance: "Alliance",
   };
 
   const typeBadgeClass: Record<Transaction["type"], string> = {
     draft: "bg-blue-100 text-blue-800",
     trade: "bg-purple-100 text-purple-800",
     waiver: "bg-amber-100 text-amber-800",
+    alliance: "bg-teal-100 text-teal-800",
   };
 
   return (
