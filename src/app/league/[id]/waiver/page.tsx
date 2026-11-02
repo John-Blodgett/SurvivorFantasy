@@ -17,7 +17,7 @@ import { computeAllyPoints } from "@/lib/scoring";
 import type { EpisodeEvent, TeamAssignment, EliminatedCastaway, FinalizedEpisode } from "@/lib/scoring";
 import { computePlayerScore } from "@/lib/scoring";
 
-type MovesSection = "waiver" | "trades" | "alliance";
+type MovesSection = "waiver" | "trades";
 
 interface PageProps {
   params: { id: string };
@@ -405,21 +405,16 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
   const pendingTradeCount = incomingTrades.length + outgoingTrades.length;
 
   // ---------------------------------------------------------------------------
-  // Section resolution — which of waiver / trades / alliance is shown
+  // Section resolution — which of waiver / trades is shown.
+  // The alliance flow lives underneath the waiver pool on the Waiver Wire
+  // section (it's only relevant once all a player's castaways are eliminated).
   // ---------------------------------------------------------------------------
   const requestedSection = searchParams.section as MovesSection | undefined;
-  const showAllianceTab = playerHasBeenDrafted;
-  const validSections: MovesSection[] = [
-    "waiver",
-    "trades",
-    ...(showAllianceTab ? (["alliance"] as const) : []),
-  ];
-  // If an ally confirmation is in progress, default to the alliance section.
-  const defaultSection: MovesSection = confirmingAllyId && showAllianceTab ? "alliance" : "waiver";
+  const validSections: MovesSection[] = ["waiver", "trades"];
   const section: MovesSection =
     requestedSection && validSections.includes(requestedSection)
       ? requestedSection
-      : defaultSection;
+      : "waiver";
 
   const sectionTabs = [
     { href: `/league/${leagueId}/waiver?section=waiver`, label: "Waiver Wire" },
@@ -428,9 +423,6 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
       label: "Trades",
       badge: pendingTradeCount,
     },
-    ...(showAllianceTab
-      ? [{ href: `/league/${leagueId}/waiver?section=alliance`, label: "Alliance" }]
-      : []),
   ];
 
   return (
@@ -660,10 +652,10 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
         )}
 
         {/* ================================================================== */}
-        {/* ALLIANCE section — only shown if player has been drafted            */}
+        {/* ALLIANCE — rendered beneath the waiver pool (same Waiver Wire tab)  */}
         {/* ================================================================== */}
-        {section === "alliance" && playerHasBeenDrafted && (
-          <div className="space-y-4">
+        {section === "waiver" && playerHasBeenDrafted && (
+          <div className="border-t border-border pt-6 space-y-4">
             <div>
               <h2 className="text-sm font-semibold">Alliance</h2>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -761,7 +753,7 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
                     </div>
                     <div className="flex gap-3">
                       <a
-                        href={`/league/${leagueId}/waiver?section=alliance`}
+                        href={`/league/${leagueId}/waiver`}
                         className="flex-1 text-center rounded border border-border px-4 py-2 text-sm font-medium hover:bg-muted transition-colors"
                       >
                         Cancel
@@ -819,7 +811,7 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
                             </p>
                           </div>
                           <a
-                            href={`/league/${leagueId}/waiver?ally=${castaway.id}&section=alliance`}
+                            href={`/league/${leagueId}/waiver?ally=${castaway.id}`}
                             className="shrink-0 rounded border border-amber-400 text-amber-700 bg-amber-50 px-3 py-1.5 text-xs font-medium hover:bg-amber-100 transition-colors min-h-[36px] flex items-center"
                             aria-label={`Ally with ${castaway.name}`}
                           >
