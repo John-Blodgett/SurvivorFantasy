@@ -40,7 +40,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   // Fetch scoring rules for the breakdown panel
   const { data: scoringRules } = await supabase
     .from("scoring_rules")
-    .select("id, name, points")
+    .select("id, name, points, description")
     .eq("league_id", leagueId)
     .order("points", { ascending: false });
 
@@ -329,9 +329,16 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
             <div className="border-t border-border px-4 py-3 space-y-3">
               <ul className="divide-y divide-border">
                 {(scoringRules ?? []).map((rule) => (
-                  <li key={rule.id} className="flex items-center justify-between py-2 text-sm">
-                    <span className="text-foreground">{rule.name}</span>
-                    <span className={`tabular-nums font-semibold ${rule.points > 0 ? "text-green-700" : rule.points < 0 ? "text-destructive" : "text-muted-foreground"}`}>
+                  <li key={rule.id} className="flex items-start justify-between gap-3 py-2 text-sm">
+                    <div className="min-w-0">
+                      <span className="text-foreground">{rule.name}</span>
+                      {(rule as { description?: string | null }).description && (
+                        <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
+                          {(rule as { description?: string | null }).description}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`tabular-nums font-semibold shrink-0 ${rule.points > 0 ? "text-green-700" : rule.points < 0 ? "text-destructive" : "text-muted-foreground"}`}>
                       {rule.points > 0 ? `+${rule.points}` : rule.points} pts
                     </span>
                   </li>

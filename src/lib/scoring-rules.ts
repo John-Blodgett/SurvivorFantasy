@@ -10,6 +10,7 @@ export interface ScoringRule {
   league_id: string;
   name: string;
   points: number;
+  description: string | null;
   is_default: boolean;
   created_at: string;
 }
@@ -17,6 +18,7 @@ export interface ScoringRule {
 export interface CreateScoringRuleInput {
   name: string;
   points: number;
+  description?: string | null;
 }
 
 export interface ScoringRuleResult {
@@ -31,6 +33,9 @@ export function validateScoringRule(input: CreateScoringRuleInput): ScoringRuleR
   }
   if (!Number.isInteger(input.points)) {
     return { valid: false, error: "Points must be a whole number." };
+  }
+  if (input.description != null && input.description.length > 500) {
+    return { valid: false, error: "Description must be 500 characters or fewer." };
   }
   return { valid: true };
 }

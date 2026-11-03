@@ -48,14 +48,16 @@ describe("scoring rule serialization round trip", () => {
         fc.uuid(),
         fc.string({ minLength: 1, maxLength: 80 }).filter((s) => s.trim().length > 0),
         fc.integer({ min: -1000, max: 1000 }),
+        fc.option(fc.string({ maxLength: 500 }), { nil: null }),
         fc.boolean(),
         fc.date({ min: new Date("2020-01-01"), max: new Date("2030-01-01") }),
-        (id, leagueId, name, points, isDefault, createdAt) => {
+        (id, leagueId, name, points, description, isDefault, createdAt) => {
           const rule: ScoringRule = {
             id,
             league_id: leagueId,
             name,
             points,
+            description,
             is_default: isDefault,
             created_at: createdAt.toISOString(),
           };
@@ -67,6 +69,7 @@ describe("scoring rule serialization round trip", () => {
           expect(deserialized.league_id).toBe(rule.league_id);
           expect(deserialized.name).toBe(rule.name);
           expect(deserialized.points).toBe(rule.points);
+          expect(deserialized.description).toBe(rule.description);
           expect(deserialized.is_default).toBe(rule.is_default);
           expect(deserialized.created_at).toBe(rule.created_at);
 

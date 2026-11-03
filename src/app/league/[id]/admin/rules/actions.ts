@@ -12,8 +12,10 @@ export async function createRuleAction(formData: FormData) {
 
   const name = (formData.get("name") as string | null) ?? "";
   const points = parseInt((formData.get("points") as string | null) ?? "", 10);
+  const descriptionRaw = ((formData.get("description") as string | null) ?? "").trim();
+  const description = descriptionRaw.length > 0 ? descriptionRaw : null;
 
-  const validation = validateScoringRule({ name, points });
+  const validation = validateScoringRule({ name, points, description });
   if (!validation.valid) {
     redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
   }
@@ -22,6 +24,7 @@ export async function createRuleAction(formData: FormData) {
     league_id: leagueId,
     name: name.trim(),
     points,
+    description,
   });
 
   if (error) {
@@ -40,17 +43,19 @@ export async function updateRuleAction(formData: FormData) {
   const ruleId = (formData.get("rule_id") as string | null) ?? "";
   const name = (formData.get("name") as string | null) ?? "";
   const points = parseInt((formData.get("points") as string | null) ?? "", 10);
+  const descriptionRaw = ((formData.get("description") as string | null) ?? "").trim();
+  const description = descriptionRaw.length > 0 ? descriptionRaw : null;
 
   if (!ruleId) redirect(`${basePath}?error=Missing+rule+ID`);
 
-  const validation = validateScoringRule({ name, points });
+  const validation = validateScoringRule({ name, points, description });
   if (!validation.valid) {
     redirect(`${basePath}?error=${encodeURIComponent(validation.error!)}`);
   }
 
   const { error } = await supabase
     .from("scoring_rules")
-    .update({ name: name.trim(), points })
+    .update({ name: name.trim(), points, description })
     .eq("id", ruleId)
     .eq("league_id", leagueId);
 
