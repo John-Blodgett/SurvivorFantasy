@@ -11,6 +11,8 @@ interface League {
   roster_size: number;
   invite_code: string;
   admin_id: string;
+  is_complete: boolean;
+  winner_id: string | null;
 }
 
 export default async function DashboardPage({
@@ -36,7 +38,7 @@ export default async function DashboardPage({
   const { data: memberships } = await supabase
     .from("league_members")
     .select(
-      "league_id, leagues ( id, name, season_number, roster_size, invite_code, admin_id )"
+      "league_id, leagues ( id, name, season_number, roster_size, invite_code, admin_id, is_complete, winner_id )"
     )
     .eq("player_id", user.id)
     .order("joined_at", { ascending: false });
@@ -44,6 +46,24 @@ export default async function DashboardPage({
   const leagues: League[] = (memberships ?? []).flatMap((m) =>
     m.leagues ? [m.leagues as unknown as League] : []
   );
+
+  const activeLeagues = leagues.filter((l) => !l.is_complete);
+  const pastLeagues = leagues.filter((l) => l.is_complete);
+
+  // Resolve winner display names for the Past Seasons section.
+  const winnerIds = Array.from(
+    new Set(pastLeagues.map((l) => l.winner_id).filter((id): id is string => !!id))
+  );
+  const winnerNames = new Map<string, string>();
+  if (winnerIds.length > 0) {
+    const { data: winnerProfiles } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", winnerIds);
+    for (const p of winnerProfiles ?? []) {
+      winnerNames.set(p.id, p.display_name);
+    }
+  }
 
   const toastMessage = searchParams.created
     ? "League created! Share the invite link with your friends."
@@ -87,7 +107,7 @@ export default async function DashboardPage({
             {toastMessage}
           </p>
         )}
-        {leagues.length === 0 ? (
+        {activeLeagues.length === 0 && pastLeagues.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center space-y-3">
             <p className="text-muted-foreground">
               You haven&apos;t joined any leagues yet.
@@ -100,22 +120,66 @@ export default async function DashboardPage({
             </Link>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {leagues.map((league) => (
-              <LeagueCard
-                key={league.id}
-                league={league}
-                isAdmin={league.admin_id === user.id}
-              />
-            ))}
-          </div>
+          <>
+            {activeLeagues.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-border p-10 text-center space-y-3">
+                <p className="text-muted-foreground">
+                  You don&apos;t have any active leagues.
+                </p>
+                <Link
+                  href="/leagues/new"
+                  className="inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  Create a League
+                </Link>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {activeLeagues.map((league) => (
+                  <LeagueCard
+                    key={league.id}
+                    league={league}
+                    isAdmin={league.admin_id === user.id}
+                  />
+                ))}
+              </div>
+            )}
+
+            {pastLeagues.length > 0 && (
+              <section className="space-y-3 pt-2">
+                <h3 className="text-lg font-semibold">Past Seasons</h3>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {pastLeagues.map((league) => (
+                    <LeagueCard
+                      key={league.id}
+                      league={league}
+                      isAdmin={league.admin_id === user.id}
+                      winnerName={
+                        league.winner_id
+                          ? winnerNames.get(league.winner_id) ?? null
+                          : null
+                      }
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </main>
     </div>
   );
 }
 
-function LeagueCard({ league, isAdmin }: { league: League; isAdmin: boolean }) {
+function LeagueCard({
+  league,
+  isAdmin,
+  winnerName,
+}: {
+  league: League;
+  isAdmin: boolean;
+  winnerName?: string | null;
+}) {
   return (
     <div className="rounded-lg border border-border bg-card p-5 space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -132,14 +196,21 @@ function LeagueCard({ league, isAdmin }: { league: League; isAdmin: boolean }) {
           </span>
         )}
       </div>
+      {league.is_complete && (
+        <p className="text-xs font-medium text-amber-700">
+          🏆 Winner: {winnerName ?? "Not determined"}
+        </p>
+      )}
       <div className="flex gap-2 flex-wrap">
         <Link
           href={`/league/${league.id}/leaderboard`}
           className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted transition-colors"
         >
-          View League
+          {league.is_complete ? "View Results" : "View League"}
         </Link>
-        <InviteCopyButton inviteCode={league.invite_code} />
+        {!league.is_complete && (
+          <InviteCopyButton inviteCode={league.invite_code} />
+        )}
       </div>
     </div>
   );
