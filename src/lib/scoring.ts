@@ -190,7 +190,10 @@ export function computePlayerScore(
         // Event has player attribution — only count if it belongs to this player
         if (event.player_id !== playerId) continue;
       } else {
-        // Legacy/preview event — fall back to points_from_episode cutoff
+        // Legacy/preview event — fall back to points_from_episode cutoff.
+        // Without a current assignment we can't tell whether this player owned
+        // the castaway at that time, so don't attribute the points to them.
+        if (!assignment) continue;
         if (event.episode_number < pointsFromEpisode) continue;
       }
 
