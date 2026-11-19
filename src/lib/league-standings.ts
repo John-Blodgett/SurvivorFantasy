@@ -1,6 +1,7 @@
 import {
   computePlayerScore,
   computeAllyPoints,
+  resolveAllyEndEpisode,
   type TeamAssignment,
   type EpisodeEvent,
   type EliminatedCastaway,
@@ -94,9 +95,18 @@ export async function computeLeagueLeaderboard(
 
   const { data: allAlliesRaw } = await supabase
     .from("league_allies")
-    .select("player_id, castaway_id, points_from_episode")
+    .select("player_id, castaway_id, points_from_episode, ended_at")
+    .eq("league_id", leagueId);
+
+  const { data: finalizedWithDatesRaw } = await supabase
+    .from("episodes")
+    .select("number, finalized_at")
     .eq("league_id", leagueId)
-    .is("ended_at", null);
+    .eq("is_finalized", true);
+  const finalizedWithDates = (finalizedWithDatesRaw ?? []) as Array<{
+    number: number;
+    finalized_at: string | null;
+  }>;
 
   // Build castaway breakdowns across all owners so alliance points can be
   // looked up regardless of the current owner.
@@ -128,9 +138,14 @@ export async function computeLeagueLeaderboard(
   for (const ally of allAlliesRaw ?? []) {
     const breakdown = castawayBreakdownMap.get(ally.castaway_id as string);
     const allyPts = breakdown
-      ? computeAllyPoints(breakdown, ally.points_from_episode as number)
+      ? computeAllyPoints(
+          breakdown,
+          ally.points_from_episode as number,
+          resolveAllyEndEpisode(ally.ended_at as string | null, finalizedWithDates)
+        )
       : 0;
-    playerAllyPoints.set(ally.player_id as string, allyPts);
+    const pid = ally.player_id as string;
+    playerAllyPoints.set(pid, (playerAllyPoints.get(pid) ?? 0) + allyPts);
   }
 
   const playerScores = (members ?? []).map(

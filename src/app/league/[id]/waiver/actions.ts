@@ -315,18 +315,31 @@ export async function createAllyAction(formData: FormData) {
     .eq("league_id", leagueId)
     .eq("player_id", user.id);
 
+  // Eliminated castaways are removed from the team when allying, so a player
+  // with no assignments is only valid if they have allied before.
   if ((playerAssignments ?? []).length === 0) {
-    redirect(`${basePath}?error=${encodeURIComponent("You must have been drafted before creating an alliance.")}`);
+    const { data: priorAlly } = await supabase
+      .from("league_allies")
+      .select("id")
+      .eq("league_id", leagueId)
+      .eq("player_id", user.id)
+      .limit(1);
+    if ((priorAlly ?? []).length === 0) {
+      redirect(`${basePath}?error=${encodeURIComponent("You must have been drafted before creating an alliance.")}`);
+    }
   }
 
   const playerCastawayIds = (playerAssignments ?? []).map((a) => a.castaway_id);
 
-  const { data: activeCastaways } = await supabase
-    .from("castaways")
-    .select("id")
-    .eq("league_id", leagueId)
-    .eq("is_eliminated", false)
-    .in("id", playerCastawayIds);
+  const { data: activeCastaways } =
+    playerCastawayIds.length > 0
+      ? await supabase
+          .from("castaways")
+          .select("id")
+          .eq("league_id", leagueId)
+          .eq("is_eliminated", false)
+          .in("id", playerCastawayIds)
+      : { data: [] as { id: string }[] };
 
   if ((activeCastaways ?? []).length > 0) {
     redirect(
@@ -419,6 +432,16 @@ export async function createAllyAction(formData: FormData) {
     redirect(
       `${basePath}?error=${encodeURIComponent("Failed to create alliance. Please try again.")}`
     );
+  }
+
+  // Allying replaces the player's eliminated castaways: remove them from the
+  // team so they no longer earn consolation points. Past points stay attributed
+  // via episode_events.player_id.
+  const { error: dropError } = await supabase.rpc("drop_eliminated_for_ally", {
+    p_league_id: leagueId,
+  });
+  if (dropError) {
+    console.error("drop_eliminated_for_ally failed:", dropError.message);
   }
 
   revalidatePath(basePath);

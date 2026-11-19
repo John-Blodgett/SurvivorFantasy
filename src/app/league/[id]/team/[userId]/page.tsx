@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { computePlayerScore, computeAllyPoints } from "@/lib/scoring";
+import { computePlayerScore, computeAllyPoints, resolveAllyEndEpisode } from "@/lib/scoring";
 import type {
   TeamAssignment,
   EpisodeEvent,
@@ -89,7 +89,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
   // Fetch all finalized episodes
   const { data: finalizedEpisodesRaw } = await supabase
     .from("episodes")
-    .select("id, number, title")
+    .select("id, number, title, finalized_at")
     .eq("league_id", leagueId)
     .eq("is_finalized", true)
     .order("number", { ascending: true });
@@ -172,14 +172,16 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
     (id) => castawayMap.get(id)?.is_eliminated
   );
 
-  // Fetch the target player's active alliance (if any)
-  const { data: activeAlly } = await supabase
+  // Fetch all of the target player's alliances (active and ended)
+  const { data: playerAlliesRaw } = await supabase
     .from("league_allies")
-    .select("id, castaway_id, points_from_episode, created_at")
+    .select("id, castaway_id, points_from_episode, created_at, ended_at")
     .eq("league_id", leagueId)
     .eq("player_id", targetUserId)
-    .is("ended_at", null)
-    .single();
+    .order("created_at", { ascending: true });
+
+  const playerAllies = playerAlliesRaw ?? [];
+  const activeAlly = playerAllies.find((a) => a.ended_at === null) ?? null;
 
   // Fetch how many players are allied with each castaway on this team
   const teamCastawayIdSet = new Set(assignments.map((a) => a.castaway_id));
@@ -197,6 +199,33 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
   for (const row of allyCountsRaw ?? []) {
     allyCounts.set(row.castaway_id, (allyCounts.get(row.castaway_id) ?? 0) + 1);
   }
+
+  // Points from every alliance (active + ended), each limited to the episodes
+  // it covered. Uses the allied castaway's attributed episode events.
+  const pastAllies = playerAllies
+    .filter((a) => a.ended_at !== null)
+    .map((a) => {
+      const epPts: { [ep: number]: number } = {};
+      for (const event of allEpisodeEvents) {
+        if (event.castaway_id !== a.castaway_id || !event.player_id) continue;
+        epPts[event.episode_number] = (epPts[event.episode_number] ?? 0) + event.points;
+      }
+      const pts = computeAllyPoints(
+        { castaway_id: a.castaway_id, episode_points: epPts, consolation_points: 0, total: 0 },
+        a.points_from_episode,
+        resolveAllyEndEpisode(
+          a.ended_at,
+          (finalizedEpisodesRaw ?? []) as Array<{ number: number; finalized_at: string | null }>
+        )
+      );
+      return {
+        id: a.id,
+        castaway_name: castawayMap.get(a.castaway_id)?.name ?? "Unknown",
+        points_from_episode: a.points_from_episode,
+        points: pts,
+      };
+    });
+  const pastAllyPoints = pastAllies.reduce((s, a) => s + a.points, 0);
 
   // Compute ally points if the target player has an active alliance
   let allyPoints = 0;
@@ -291,7 +320,7 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
               {displayName} &middot; Season {league.season_number}
             </p>
             <p className="text-3xl font-bold tabular-nums mt-1">
-              {scoreBreakdown.total}{" "}
+              {scoreBreakdown.total + allyPoints + pastAllyPoints}{" "}
               <span className="text-base font-normal text-muted-foreground">
                 pts
               </span>
@@ -331,7 +360,10 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
           />
         )}
 
-        {teamCastawayIds.length === 0 ? (
+        {teamCastawayIds.length === 0 &&
+        scoreBreakdown.castaways.length === 0 &&
+        playerAllies.length === 0 &&
+        scoreBreakdown.challenge_points === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
             <p className="text-muted-foreground text-sm">
               No castaways on this team yet.
@@ -436,7 +468,17 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
                             )}
                             <div className="flex-1 min-w-0">
                               <span className="text-sm font-medium text-muted-foreground">{castaway.name}</span>
-                              <p className="text-xs text-muted-foreground">Traded/dropped — points retained from prior episodes</p>
+                              <p className="text-xs text-muted-foreground">
+                                {castaway.is_eliminated
+                                  ? `Eliminated Ep. ${castaway.eliminated_episode ?? "?"} — points retained`
+                                  : "Traded/dropped — points retained from prior episodes"}
+                              </p>
+                              <p className="text-xs text-muted-foreground tabular-nums">
+                                {Object.entries(breakdown.episode_points)
+                                  .sort(([a], [b]) => Number(a) - Number(b))
+                                  .map(([ep, pts]) => `Ep.${ep}: ${pts > 0 ? "+" : ""}${pts}`)
+                                  .join(" · ")}
+                              </p>
                             </div>
                             <span className="tabular-nums font-bold text-sm">{breakdown.total} pts</span>
                           </div>
@@ -471,6 +513,26 @@ export default async function TeamPage({ params, searchParams }: PageProps) {
                 <p className="text-xs text-amber-700">
                   Earning from Ep. {activeAlly.points_from_episode} onward &middot; Locked in until {allyCastawayName} is eliminated
                 </p>
+              </section>
+            )}
+
+            {/* Past (ended) alliances */}
+            {pastAllies.length > 0 && (
+              <section className="rounded-lg border border-border bg-card p-4 space-y-2">
+                <span className="text-sm font-semibold">🤝 Past Alliances</span>
+                {pastAllies.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {a.castaway_name} (from Ep. {a.points_from_episode})
+                    </span>
+                    <span
+                      className={`tabular-nums font-medium ${a.points < 0 ? "text-red-700" : "text-green-700"}`}
+                    >
+                      {a.points > 0 ? "+" : ""}
+                      {a.points}
+                    </span>
+                  </div>
+                ))}
               </section>
             )}
 

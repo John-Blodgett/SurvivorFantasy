@@ -150,7 +150,17 @@ export default async function WaiverWirePage({ params, searchParams }: PageProps
       (c) => playerCastawayIds.includes(c.id) && !c.is_eliminated
     );
 
-  const playerHasBeenDrafted = playerCastawayIds.length > 0;
+  // Eliminated castaways are dropped when a player allies, so a player with
+  // alliance history counts as drafted even with an empty roster.
+  const { data: anyPriorAlly } = await supabase
+    .from("league_allies")
+    .select("id")
+    .eq("league_id", leagueId)
+    .eq("player_id", user.id)
+    .limit(1);
+
+  const playerHasBeenDrafted =
+    playerCastawayIds.length > 0 || (anyPriorAlly ?? []).length > 0;
   const isAllyEligible = playerHasBeenDrafted && !playerHasActiveCastaways;
 
   // Fetch this player's active alliance (if any)

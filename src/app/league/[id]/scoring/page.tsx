@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import AppShell from "@/components/app-shell";
 import { buildLeagueNav } from "@/components/league-nav";
+import { resolveAllyEndEpisode } from "@/lib/scoring";
 
 interface PageProps {
   params: { id: string };
@@ -53,7 +54,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   // Fetch all finalized episodes for the sub-nav
   const { data: allEpisodes } = await supabase
     .from("episodes")
-    .select("number")
+    .select("number, finalized_at")
     .eq("league_id", leagueId)
     .eq("is_finalized", true)
     .order("number", { ascending: true });
@@ -74,12 +75,19 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   // Fetch all castaways for photos and castaway filter
   const { data: allCastaways } = await supabase
     .from("castaways")
-    .select("id, name, photo_url")
+    .select("id, name, photo_url, eliminated_episode")
     .eq("league_id", leagueId)
     .order("name");
 
   const castawayMap = new Map(
-    (allCastaways ?? []).map((c) => [c.id, { name: c.name, photo_url: c.photo_url }])
+    (allCastaways ?? []).map((c) => [
+      c.id,
+      {
+        name: c.name,
+        photo_url: c.photo_url,
+        eliminated_episode: c.eliminated_episode as number | null,
+      },
+    ])
   );
 
   // Fetch episode events
@@ -167,7 +175,14 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       castaway_id: castawayId,
       castaway_name: castaway.name as string,
       castaway_photo: castawayMap.get(castawayId)?.photo_url ?? null,
-      rule_name: rule?.name as string | null ?? (points > 0 ? "Consolation" : null),
+      // Events with no rule are either consolation (episode after the castaway's
+      // elimination) or events whose scoring rule was later deleted.
+      rule_name:
+        (rule?.name as string | undefined) ??
+        (castawayMap.get(castawayId)?.eliminated_episode != null &&
+        (episode.number as number) > castawayMap.get(castawayId)!.eliminated_episode!
+          ? "Consolation"
+          : "Deleted rule"),
       points,
       player_name: playerId ? (profileMap.get(playerId) ?? "Unknown") : "Unassigned",
       player_id: playerId,
@@ -208,9 +223,24 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   // Add synthetic alliance rows: per ally per episode >= points_from_episode
   // Build a map of castaway_id → per-episode points breakdown (across all finalized events)
   if (!playerFilter || allAlliesForLog.some((a) => a.player_id === playerFilter)) {
+    // Load ALL finalized events for the allied castaways. The main events query
+    // may be filtered by player/episode/castaway, and an allied castaway's
+    // events belong to another player, so they must be fetched separately.
+    const allyCastawayIds = Array.from(new Set(allAlliesForLog.map((a) => a.castaway_id as string)));
+    let allyEventsRaw: Array<Record<string, unknown>> = [];
+    if (allyCastawayIds.length > 0) {
+      const { data } = await supabase
+        .from("episode_events")
+        .select("points, castaway_id, episodes!inner(number, league_id, is_finalized)")
+        .eq("episodes.league_id", leagueId)
+        .eq("episodes.is_finalized", true)
+        .in("castaway_id", allyCastawayIds);
+      allyEventsRaw = (data ?? []) as unknown as Array<Record<string, unknown>>;
+    }
+
     // Group episode events by castaway_id and episode
     const castawayEpisodePtsMap = new Map<string, Map<number, number>>();
-    for (const event of (eventsRaw ?? []) as Array<Record<string, unknown>>) {
+    for (const event of allyEventsRaw) {
       const ep = event.episodes as Record<string, unknown>;
       const epNum = ep.number as number;
       const cId = event.castaway_id as string;
@@ -234,6 +264,11 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       for (const [epNum, castawayPts] of Array.from(castawayEpPts.entries())) {
         if (episodeFilter && epNum !== episodeFilter) continue;
         if (epNum < ally.points_from_episode) continue;
+        const endEp = resolveAllyEndEpisode(
+          ally.ended_at as string | null,
+          (allEpisodes ?? []) as Array<{ number: number; finalized_at: string | null }>
+        );
+        if (endEp !== undefined && epNum > endEp) continue;
 
         // Ally earns ceil(half) of the castaway's episode points for episodes
         // at or after points_from_episode (filtered above).

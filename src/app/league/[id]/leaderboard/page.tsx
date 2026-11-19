@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { computePlayerScore, computeAllyPoints } from "@/lib/scoring";
+import { computePlayerScore, computeAllyPoints, resolveAllyEndEpisode } from "@/lib/scoring";
 import { computeLeaderboard } from "@/lib/leaderboard";
 import AppShell from "@/components/app-shell";
 import { buildLeagueNav } from "@/components/league-nav";
@@ -57,9 +57,14 @@ export default async function LeaderboardPage({ params }: PageProps) {
   // Fetch all finalized episodes
   const { data: finalizedEpisodesRaw } = await supabase
     .from("episodes")
-    .select("number")
+    .select("number, finalized_at")
     .eq("league_id", leagueId)
     .eq("is_finalized", true);
+
+  const finalizedWithDates = (finalizedEpisodesRaw ?? []) as Array<{
+    number: number;
+    finalized_at: string | null;
+  }>;
 
   const finalizedEpisodes: FinalizedEpisode[] = (finalizedEpisodesRaw ?? []).map(
     (e) => ({ number: e.number })
@@ -128,12 +133,12 @@ export default async function LeaderboardPage({ params }: PageProps) {
     playerCastaways.set(a.player_id, list);
   }
 
-  // Fetch all active alliances for this league
+  // Fetch all alliances (active and ended) so points earned before an
+  // alliance ended still count.
   const { data: allAlliesRaw } = await supabase
     .from("league_allies")
-    .select("player_id, castaway_id, points_from_episode")
-    .eq("league_id", leagueId)
-    .is("ended_at", null);
+    .select("player_id, castaway_id, points_from_episode, ended_at")
+    .eq("league_id", leagueId);
 
   // Build a map of castaway_id → CastawayBreakdown (across all owners)
   // so alliance points can be looked up regardless of current owner.
@@ -161,9 +166,20 @@ export default async function LeaderboardPage({ params }: PageProps) {
   const playerAllyInfo = new Map<string, { castaway_name: string; ally_pts: number }>();
   for (const ally of allAlliesRaw ?? []) {
     const breakdown = castawayBreakdownMap.get(ally.castaway_id);
-    const allyPts = breakdown ? computeAllyPoints(breakdown, ally.points_from_episode) : 0;
+    const allyPts = breakdown
+      ? computeAllyPoints(
+          breakdown,
+          ally.points_from_episode,
+          resolveAllyEndEpisode(ally.ended_at, finalizedWithDates)
+        )
+      : 0;
     const castawayName = castawayMap.get(ally.castaway_id)?.name ?? "Unknown";
-    playerAllyInfo.set(ally.player_id, { castaway_name: castawayName, ally_pts: allyPts });
+    const prev = playerAllyInfo.get(ally.player_id);
+    playerAllyInfo.set(ally.player_id, {
+      // Badge shows the current (active) ally only
+      castaway_name: ally.ended_at ? (prev?.castaway_name ?? "") : castawayName,
+      ally_pts: (prev?.ally_pts ?? 0) + allyPts,
+    });
   }
 
   // Compute score for each member (direct score only; ally points added separately)
@@ -302,7 +318,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
                             </span>
                           )}
                           {/* Alliance indicator on small screens */}
-                          {playerAllyInfo.has(entry.player_id) && (
+                          {!!playerAllyInfo.get(entry.player_id)?.castaway_name && (
                             <span className="mt-1 lg:hidden inline-flex items-center gap-1 text-xs text-amber-700 font-normal">
                               🤝 Allied: {playerAllyInfo.get(entry.player_id)!.castaway_name}
                             </span>
@@ -337,7 +353,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
                           </div>
                         )}
                         {/* Alliance indicator on desktop */}
-                        {playerAllyInfo.has(entry.player_id) && (
+                        {!!playerAllyInfo.get(entry.player_id)?.castaway_name && (
                           <span className="inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
                             🤝 Allied: {playerAllyInfo.get(entry.player_id)!.castaway_name}
                           </span>

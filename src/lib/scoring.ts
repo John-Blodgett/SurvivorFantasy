@@ -277,16 +277,25 @@ export function computePlayerScore(
  * @param castawayBreakdown  - The full CastawayBreakdown for the allied castaway
  *                             (taken from the current owner's computePlayerScore result)
  * @param pointsFromEpisode  - First episode the ally is eligible to earn points from
+ * @param throughEpisode     - Optional last episode (inclusive) the alliance covered.
+ *                             Pass this for ended alliances. When set, the aggregate
+ *                             consolation total is ignored (the alliance ended before
+ *                             any post-elimination consolation could apply).
  */
 export function computeAllyPoints(
   castawayBreakdown: CastawayBreakdown,
-  pointsFromEpisode: number
+  pointsFromEpisode: number,
+  throughEpisode?: number
 ): number {
   let episodeTotal = 0;
   for (const [epNum, pts] of Object.entries(castawayBreakdown.episode_points)) {
-    if (Number(epNum) >= pointsFromEpisode) {
+    const n = Number(epNum);
+    if (n >= pointsFromEpisode && (throughEpisode === undefined || n <= throughEpisode)) {
       episodeTotal += pts;
     }
+  }
+  if (throughEpisode !== undefined) {
+    return Math.ceil(episodeTotal / 2);
   }
   // Consolation points are already aggregated on the breakdown.
   // They apply only to episodes after elimination, so we always include them
@@ -294,4 +303,24 @@ export function computeAllyPoints(
   // for event points; consolation is a separate aggregate).
   const rawTotal = episodeTotal + castawayBreakdown.consolation_points;
   return Math.ceil(rawTotal / 2);
+}
+
+/**
+ * Returns the last episode (inclusive) an ended alliance covered: the highest
+ * finalized episode whose finalized_at is at or before the alliance's ended_at.
+ * Returns undefined for active alliances (no cutoff).
+ */
+export function resolveAllyEndEpisode(
+  endedAt: string | null,
+  finalizedEpisodes: Array<{ number: number; finalized_at: string | null }>
+): number | undefined {
+  if (!endedAt) return undefined;
+  const endMs = new Date(endedAt).getTime();
+  let result = 0;
+  for (const ep of finalizedEpisodes) {
+    if (ep.finalized_at && new Date(ep.finalized_at).getTime() <= endMs) {
+      result = Math.max(result, ep.number);
+    }
+  }
+  return result;
 }
