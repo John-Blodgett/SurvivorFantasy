@@ -78,6 +78,7 @@ export default async function AdminHubPage({ params, searchParams }: PageProps) 
     { href: `/league/${leagueId}/admin/draft`, label: "Draft", description: "Configure the draft and assign late-joiners" },
     { href: `/league/${leagueId}/admin/episode/${scoreEpisodeNum}`, label: "Score Episode", description: `Score episode ${scoreEpisodeNum}` },
     { href: `/league/${leagueId}/admin/waiver`, label: "Waiver Wire", description: "Configure schedule and process claims" },
+    { href: `/league/${leagueId}/admin/awards`, label: "Awards Preview", description: "See what the season awards would be right now" },
   ];
 
   return (

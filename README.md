@@ -75,6 +75,7 @@ supabase/
 - Waiver wire for picking up unowned castaways
 - Weekly trivia/prediction challenges
 - Leaderboard with aggregated scores
+- Season awards: fun, non-scoring awards computed from season stats and revealed when the admin completes the season
 
 ## Troubleshooting
 

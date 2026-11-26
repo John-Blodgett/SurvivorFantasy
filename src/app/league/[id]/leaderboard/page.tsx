@@ -40,7 +40,7 @@ export default async function LeaderboardPage({ params }: PageProps) {
   // Fetch league info
   const { data: league } = await supabase
     .from("leagues")
-    .select("id, name, season_number, consolation_points, admin_id")
+    .select("id, name, season_number, consolation_points, admin_id, is_complete")
     .eq("id", leagueId)
     .single();
 
@@ -232,6 +232,14 @@ export default async function LeaderboardPage({ params }: PageProps) {
       navLinks={await buildLeagueNav(supabase, leagueId, isAdmin)}
     >
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
+        {league.is_complete && (
+          <Link
+            href={`/league/${leagueId}/awards`}
+            className="block rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 hover:bg-amber-100 transition-colors"
+          >
+            🏅 The season is over. See the awards
+          </Link>
+        )}
         <p className="text-sm text-muted-foreground">
           Season {league.season_number} &middot;{" "}
           {finalizedEpisodes.length} episode

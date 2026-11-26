@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { computeLeagueLeaderboard } from "@/lib/league-standings";
+import { loadAwardsInput } from "@/lib/league-awards";
+import { computeAwards, flattenWinners } from "@/lib/awards";
 import { requireLeagueAdmin } from "./helpers";
 
 /**
@@ -37,6 +39,18 @@ export async function markSeasonCompleteAction(formData: FormData) {
   );
   const winnerId = leaderboard.find((e) => e.rank === 1)?.player_id ?? null;
 
+  // Compute and save the season awards before marking the league complete,
+  // so a failure leaves the league open.
+  const awardsInput = await loadAwardsInput(supabase, leagueId);
+  const awardRows = flattenWinners(computeAwards(awardsInput));
+  const { data: saved, error: saveError } = await supabase.rpc("replace_league_awards", {
+    p_league_id: leagueId,
+    p_awards: awardRows,
+  });
+  if (saveError || saved?.error) {
+    redirect(`${basePath}?error=${encodeURIComponent("Failed to save season awards.")}`);
+  }
+
   const { error } = await supabase
     .from("leagues")
     .update({
@@ -47,10 +61,14 @@ export async function markSeasonCompleteAction(formData: FormData) {
     .eq("id", leagueId);
 
   if (error) {
+    // Roll back the saved awards so the league stays consistent.
+    await supabase.rpc("replace_league_awards", { p_league_id: leagueId, p_awards: [] });
     redirect(`${basePath}?error=${encodeURIComponent("Failed to mark season complete.")}`);
   }
 
   revalidatePath(basePath);
+  revalidatePath(`/league/${leagueId}/leaderboard`);
+  revalidatePath(`/league/${leagueId}/awards`);
   revalidatePath("/dashboard");
   redirect(`${basePath}?success=completed`);
 }
@@ -63,6 +81,15 @@ export async function reopenSeasonAction(formData: FormData) {
   const { supabase } = await requireLeagueAdmin(leagueId);
   const basePath = `/league/${leagueId}/admin`;
 
+  // Clear saved awards; they are recomputed the next time the season completes.
+  const { data: cleared, error: clearError } = await supabase.rpc("replace_league_awards", {
+    p_league_id: leagueId,
+    p_awards: [],
+  });
+  if (clearError || cleared?.error) {
+    redirect(`${basePath}?error=${encodeURIComponent("Failed to clear season awards.")}`);
+  }
+
   const { error } = await supabase
     .from("leagues")
     .update({ is_complete: false, completed_at: null, winner_id: null })
@@ -73,6 +100,8 @@ export async function reopenSeasonAction(formData: FormData) {
   }
 
   revalidatePath(basePath);
+  revalidatePath(`/league/${leagueId}/leaderboard`);
+  revalidatePath(`/league/${leagueId}/awards`);
   revalidatePath("/dashboard");
   redirect(`${basePath}?success=reopened`);
 }
