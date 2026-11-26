@@ -4,6 +4,7 @@ import Link from "next/link";
 import AppShell from "@/components/app-shell";
 import { buildLeagueNav } from "@/components/league-nav";
 import { resolveAllyEndEpisode } from "@/lib/scoring";
+import { condenseLogEvents, formatRuleLabel } from "@/lib/scoring-log";
 
 interface PageProps {
   params: { id: string };
@@ -301,9 +302,12 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
     return 0; // preserve insertion order within same episode
   });
 
+  // Merge duplicate events (same episode, castaway, rule, player) into one row
+  const logEvents = condenseLogEvents(events);
+
   // Recompute running totals after sorting (ascending order required for accuracy)
   playerTotals.clear();
-  for (const event of events) {
+  for (const event of logEvents) {
     if (event.player_id) {
       const current = playerTotals.get(event.player_id) ?? 0;
       playerTotals.set(event.player_id, current + event.points);
@@ -312,7 +316,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   }
 
   // Reverse so most recent events appear at the top
-  events.reverse();
+  logEvents.reverse();
 
   // Build filter URL helper
   function filterUrl(overrides: { episode?: string | null; player?: string | null; castaway?: string | null; show?: string | null }) {
@@ -332,10 +336,10 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
   // Castaway breakdown (when a castaway is selected)
   let castawayBreakdown: { episode: number; points: number; rule: string | null }[] | null = null;
   if (castawayFilter) {
-    castawayBreakdown = events.map((e) => ({
+    castawayBreakdown = logEvents.map((e) => ({
       episode: e.episode_number,
       points: e.points,
-      rule: e.rule_name,
+      rule: formatRuleLabel(e.rule_name, e.count),
     }));
   }
 
@@ -527,7 +531,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
         )}
 
         {/* Events list */}
-        {events.length === 0 ? (
+        {logEvents.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
             <p className="text-muted-foreground text-sm">
               No scoring events match the current filters.
@@ -537,7 +541,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
           <>
             {/* Mobile: card layout */}
             <div className="space-y-2 lg:hidden">
-              {events.map((event) => (
+              {logEvents.map((event) => (
                 <div
                   key={event.id}
                   className={`rounded-lg border bg-card px-3 py-2.5 flex items-center gap-3 ${
@@ -581,7 +585,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                       )}
                     </p>
                     <p className="text-xs text-muted-foreground break-words">
-                      {event.rule_name ?? "—"}
+                      {formatRuleLabel(event.rule_name, event.count)}
                     </p>
                     {event.castaway_id && (
                       <p className="text-xs text-muted-foreground truncate">
@@ -619,7 +623,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                   </tr>
                 </thead>
                 <tbody>
-                  {events.map((event) => (
+                  {logEvents.map((event) => (
                     <tr
                       key={event.id}
                       className={`border-b border-border last:border-0 transition-colors ${
@@ -651,7 +655,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
                           <span className="text-muted-foreground italic">🏆 Challenge</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{event.rule_name ?? "—"}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{formatRuleLabel(event.rule_name, event.count)}</td>
                       <td className={`px-3 py-2.5 text-right tabular-nums font-semibold ${
                         event.points > 0 ? "text-green-700" : event.points < 0 ? "text-destructive" : ""
                       }`}>
