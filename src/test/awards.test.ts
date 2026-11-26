@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
 import {
   AWARD_CATALOGUE,
+  AWARD_EMOJI,
   AWARD_THRESHOLDS,
   buildStandingsHistory,
   claimEpisode,
@@ -891,6 +892,14 @@ describe("Jinx", () => {
 // ---------------------------------------------------------------------------
 // computeAwards orchestration
 // ---------------------------------------------------------------------------
+
+describe("AWARD_EMOJI", () => {
+  it("has a picture for every award and nothing extra", () => {
+    const keys = AWARD_CATALOGUE.map((a) => a.key).sort();
+    expect(Object.keys(AWARD_EMOJI).sort()).toEqual(keys);
+    for (const k of keys) expect(AWARD_EMOJI[k].length).toBeGreaterThan(0);
+  });
+});
 
 describe("computeAwards", () => {
   it("returns every catalogue award once", () => {

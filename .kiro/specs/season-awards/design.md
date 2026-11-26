@@ -232,7 +232,15 @@ Server component. Uses `requireLeagueAdmin`, `loadAwardsInput`, and `computeAwar
 - An empty state when there are no finalized episodes.
 - A note that nothing is saved until the season is completed.
 
-### Player page: `/league/[id]/awards`
+### Season Recap page: `/league/[id]/recap`
+
+Sections in order: Final Podium, replay chart, Season Awards.
+
+- Podium and chart data come from `loadAwardsInput` and `buildStandingsHistory`, so they match the leaderboard. Pure helpers live in `src/lib/season-recap.ts`: `assignPlayerColors`, `buildRecapSeries`, `computePodium`, `easeInOut`, `valueAt`, `pointsUpTo`, `valueRange`, `spreadLabels`, `niceTicks`.
+- `src/components/season-replay-chart.tsx` is a client component that draws an SVG line chart. Playback position runs from 0 to the episode count and advances by `requestAnimationFrame` at 1.5 s per episode. Each line's tip is `valueAt(totals, progress)`, which eases from one episode total to the next. Tip labels are spread apart with `spreadLabels`. It autoplays via `IntersectionObserver` and honors `prefers-reduced-motion`.
+- The chart's y-axis is fixed to the season's full range so lines don't jump while playing.
+
+### Awards section (formerly the player awards page)
 
 Server component, wrapped in `AppShell` with a back link to the leaderboard. There is no nav tab. If `is_complete` is false, it redirects to `/league/[id]/leaderboard` and shows nothing. If complete, it reads `league_awards`, groups rows by `award_key`, looks up display metadata in the catalogue (skipping unknown keys), and renders cards grouped by category.
 

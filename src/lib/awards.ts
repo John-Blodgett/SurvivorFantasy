@@ -1248,6 +1248,37 @@ export const AWARD_CATALOGUE: AwardDefinition[] = [
   jinx,
 ];
 
+/** The picture shown on each award's card. Change freely. */
+export const AWARD_EMOJI: Record<string, string> = {
+  king_of_the_hill: "👑",
+  peaked_too_early: "📉",
+  comeback_kid: "🚀",
+  cellar_dweller: "🕳️",
+  cliff_diver: "🪂",
+  rock_bottom: "🪨",
+  photo_finish: "📸",
+  rollercoaster: "🎢",
+  on_fire: "🔥",
+  big_spender: "💸",
+  sucker_bid: "🍭",
+  one_that_got_away: "🎣",
+  going_down_with_the_ship: "🚢",
+  hoarder: "🛒",
+  dumpster_diver: "🗑️",
+  waiver_mvp: "💎",
+  commitment_issues: "💔",
+  kiss_of_death: "💋",
+  coattail_rider: "🧥",
+  sole_survivor_whisperer: "🗣️",
+  the_oracle: "🔮",
+  lone_wolf: "🐺",
+  black_sheep: "🐑",
+  participation_trophy: "🎗️",
+  immunity_magnet: "🧲",
+  blindside_victim: "🔪",
+  jinx: "🐈‍⬛",
+};
+
 export function getAwardDefinition(key: string): AwardDefinition | undefined {
   return AWARD_CATALOGUE.find((a) => a.key === key);
 }

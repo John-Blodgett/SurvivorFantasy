@@ -68,7 +68,7 @@ export async function markSeasonCompleteAction(formData: FormData) {
 
   revalidatePath(basePath);
   revalidatePath(`/league/${leagueId}/leaderboard`);
-  revalidatePath(`/league/${leagueId}/awards`);
+  revalidatePath(`/league/${leagueId}/recap`);
   revalidatePath("/dashboard");
   redirect(`${basePath}?success=completed`);
 }
@@ -101,7 +101,7 @@ export async function reopenSeasonAction(formData: FormData) {
 
   revalidatePath(basePath);
   revalidatePath(`/league/${leagueId}/leaderboard`);
-  revalidatePath(`/league/${leagueId}/awards`);
+  revalidatePath(`/league/${leagueId}/recap`);
   revalidatePath("/dashboard");
   redirect(`${basePath}?success=reopened`);
 }

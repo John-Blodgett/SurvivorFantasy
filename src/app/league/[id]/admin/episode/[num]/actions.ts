@@ -14,6 +14,7 @@ import {
 } from "@/lib/challenges";
 import { buildTribeEvents } from "@/lib/tribes";
 import { buildBatchEvents, parseEventQuantity, MAX_EVENT_QUANTITY } from "@/lib/scoring";
+import { expandTallyToEvents, validateTallySubmission } from "@/lib/live-tally";
 import { toPacificISO } from "@/lib/timezone";
 import { requireLeagueAdmin } from "../../helpers";
 
@@ -78,6 +79,59 @@ export async function addEpisodeEventAction(formData: FormData) {
   }
 
   revalidatePath(basePath);
+}
+
+/**
+ * Saves a Live Tally: every tapped count becomes ordinary episode events,
+ * written in one insert. Points come from the league's rules on the server.
+ */
+export async function submitTallyAction(formData: FormData) {
+  const leagueId = formData.get("league_id") as string;
+  const { supabase } = await requireLeagueAdmin(leagueId);
+  const episodeNumber = parseInt(formData.get("episode_number") as string, 10);
+  const basePath = `/league/${leagueId}/admin/episode/${episodeNumber}`;
+
+  if (isNaN(episodeNumber) || episodeNumber < 1) {
+    redirect(`${basePath}?error=${encodeURIComponent("Invalid episode.")}`);
+  }
+
+  let entries: unknown;
+  try {
+    entries = JSON.parse((formData.get("tally") as string | null) ?? "");
+  } catch {
+    redirect(`${basePath}?error=${encodeURIComponent("Could not read the tally.")}`);
+  }
+
+  const episodeId = await ensureEpisode(supabase, leagueId, episodeNumber);
+  const { data: episode } = await supabase
+    .from("episodes").select("is_finalized").eq("id", episodeId).single();
+  if (episode?.is_finalized) {
+    redirect(`${basePath}?error=${encodeURIComponent("Cannot add events to a finalized episode.")}`);
+  }
+
+  const { data: castawayRows } = await supabase
+    .from("castaways").select("id").eq("league_id", leagueId);
+  const { data: ruleRows } = await supabase
+    .from("scoring_rules").select("id, points").eq("league_id", leagueId);
+
+  const validation = validateTallySubmission(
+    entries,
+    new Set((castawayRows ?? []).map((c) => c.id as string)),
+    new Map((ruleRows ?? []).map((r) => [r.id as string, r.points as number]))
+  );
+  if (!validation.valid) {
+    redirect(`${basePath}?error=${encodeURIComponent(validation.error)}`);
+  }
+
+  const events = expandTallyToEvents(episodeId, validation.rows);
+  const { error } = await supabase.from("episode_events").insert(events);
+  if (error) {
+    redirect(`${basePath}?error=${encodeURIComponent("Failed to save the tally. Your counts are still on this device.")}`);
+  }
+
+  revalidatePath(basePath);
+  // The token lets the device clear its saved tally exactly once.
+  redirect(`${basePath}?success=tally&tally=${Date.now()}`);
 }
 
 export async function removeEpisodeEventAction(formData: FormData) {

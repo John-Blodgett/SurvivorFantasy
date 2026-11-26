@@ -234,10 +234,10 @@ export default async function LeaderboardPage({ params }: PageProps) {
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
         {league.is_complete && (
           <Link
-            href={`/league/${leagueId}/awards`}
+            href={`/league/${leagueId}/recap`}
             className="block rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 hover:bg-amber-100 transition-colors"
           >
-            🏅 The season is over. See the awards
+            🏆 The season is over. See the season recap
           </Link>
         )}
         <p className="text-sm text-muted-foreground">

@@ -14,6 +14,8 @@ import {
   gradeChallengeSubmissionAction,
 } from "./actions";
 import EpisodeScorerForm from "@/components/episode-scorer-form";
+import LiveTally from "@/components/live-tally";
+import EpisodeTabs, { EpisodeTabPanel, type EpisodeTab } from "@/components/episode-tabs";
 import BatchScoringForm from "@/components/batch-scoring-form";
 import EliminationForm from "@/components/elimination-form";
 import ChallengeTypeFields, { type CastawayChoice } from "./challenge-type-fields";
@@ -30,7 +32,7 @@ import type { Challenge, ChallengeSubmission } from "@/lib/challenges";
 
 interface PageProps {
   params: { id: string; num: string };
-  searchParams: { error?: string; success?: string };
+  searchParams: { error?: string; success?: string; tally?: string };
 }
 
 export default async function AdminEpisodePage({ params, searchParams }: PageProps) {
@@ -115,10 +117,24 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
   const regularEvents = events.filter((e) => e.scoring_rule_id !== null);
   const consolationEvents = events.filter((e) => e.scoring_rule_id === null);
 
+  // Tally and Add only make sense until the episode is finalized.
+  const tabs: EpisodeTab[] = [
+    ...(isFinalized ? [] : [{ id: "tally", label: "Tally" }, { id: "add", label: "Add" }]),
+    { id: "events", label: "Events", badge: regularEvents.length },
+    { id: "challenges", label: "Challenges", badge: challenges.length },
+    { id: "finish", label: "Finish" },
+  ];
+  // After these actions, open the tab where the result shows up.
+  const forcedTab =
+    searchParams.success === "tally" ? "events"
+    : searchParams.success === "finalized" || searchParams.success === "unfinalized" || searchParams.success === "eliminated" ? "finish"
+    : null;
+
   const successMessage =
     searchParams.success === "finalized" ? "Episode finalized successfully."
     : searchParams.success === "unfinalized" ? "Episode un-finalized. You can now make corrections."
     : searchParams.success === "eliminated" ? "Castaways eliminated successfully."
+    : searchParams.success === "tally" ? "Tally saved. Check the new events below."
     : null;
 
   return (
@@ -157,40 +173,43 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
           </Link>
         </nav>
 
-        {/* Finalize / Un-finalize controls */}
-        <section className="flex flex-wrap items-center gap-3">
-          {!isFinalized ? (
-            <form action={finalizeEpisodeAction}>
-              <input type="hidden" name="league_id" value={leagueId} />
-              <input type="hidden" name="episode_number" value={episodeNumber} />
-              <SubmitButton pendingText="Finalizing…" className="rounded bg-green-700 text-white px-4 py-2 text-sm font-medium hover:bg-green-800 transition-colors disabled:opacity-50">
-                Finalize Episode
-              </SubmitButton>
-            </form>
-          ) : (
-            <form action={unfinalizeEpisodeAction}>
-              <input type="hidden" name="league_id" value={leagueId} />
-              <input type="hidden" name="episode_number" value={episodeNumber} />
-              <SubmitButton pendingText="Un-finalizing…" className="rounded border border-amber-600 text-amber-700 px-4 py-2 text-sm font-medium hover:bg-amber-50 transition-colors disabled:opacity-50">
-                Un-finalize Episode
-              </SubmitButton>
-            </form>
-          )}
-          {league.consolation_points > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Finalizing awards {league.consolation_points} consolation pt{league.consolation_points !== 1 ? "s" : ""} per eliminated castaway.
-            </p>
-          )}
-        </section>
+        <EpisodeTabs
+          tabs={tabs}
+          defaultTab={isFinalized ? "events" : "tally"}
+          forcedTab={forcedTab}
+          storageKey={`episode-tab:${leagueId}:${episodeNumber}`}
+        >
+        {!isFinalized && (
+          <EpisodeTabPanel id="tally">
+          <section aria-labelledby="tally-heading">
+            <h2 id="tally-heading" className="text-base font-semibold mb-3">Live Tally</h2>
+            <LiveTally
+              leagueId={leagueId}
+              episodeNumber={episodeNumber}
+              castaways={allCastaways.map((c) => ({
+                id: c.id as string,
+                name: c.name as string,
+                photo_url: (c.photo_url as string | null) ?? null,
+              }))}
+              rules={allRules.map((r) => ({
+                id: r.id,
+                name: r.name,
+                points: r.points,
+                is_default: r.is_default,
+              }))}
+              submittedToken={searchParams.success === "tally" ? searchParams.tally ?? null : null}
+            />
+          </section>
+          </EpisodeTabPanel>
+        )}
 
         {!isFinalized && (
+          <EpisodeTabPanel id="add">
           <section aria-labelledby="score-heading">
             <h2 id="score-heading" className="text-base font-semibold mb-3">Record Event</h2>
             <EpisodeScorerForm leagueId={leagueId} episodeNumber={episodeNumber} castaways={allCastaways as unknown as Castaway[]} rules={allRules} />
           </section>
-        )}
 
-        {!isFinalized && (
           <section aria-labelledby="batch-score-heading">
             <h2 id="batch-score-heading" className="text-base font-semibold mb-3">Batch Scoring</h2>
             <BatchScoringForm
@@ -206,8 +225,10 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
               scoringRules={allRules.map((r) => ({ id: r.id, name: r.name, points: r.points }))}
             />
           </section>
+          </EpisodeTabPanel>
         )}
 
+        <EpisodeTabPanel id="events">
         <section aria-labelledby="log-heading">
           <h2 id="log-heading" className="text-base font-semibold mb-3">Events ({regularEvents.length})</h2>
           {regularEvents.length === 0 ? (
@@ -236,7 +257,9 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
             </ul>
           </section>
         )}
+        </EpisodeTabPanel>
 
+        <EpisodeTabPanel id="challenges">
         <section aria-labelledby="challenges-heading">
           <h2 id="challenges-heading" className="text-base font-semibold mb-3">Weekly Challenges</h2>
           <details className="rounded-lg border border-border bg-card mb-4">
@@ -285,7 +308,9 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
             </div>
           )}
         </section>
+        </EpisodeTabPanel>
 
+        <EpisodeTabPanel id="finish">
         {/* Elimination section — only non-eliminated castaways */}
         {!isFinalized && (
           <section aria-labelledby="elimination-heading">
@@ -302,6 +327,41 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
             </div>
           </section>
         )}
+
+        {/* Finalize / Un-finalize controls */}
+        <section aria-labelledby="finalize-heading" className="space-y-3">
+          <h2 id="finalize-heading" className="text-base font-semibold">
+            {isFinalized ? "Episode Finalized" : "Finalize Without Eliminations"}
+          </h2>
+          <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              {isFinalized
+                ? "Un-finalize to make corrections. Consolation points are removed and re-added when you finalize again."
+                : "Use this when nobody was eliminated this episode. Otherwise, use Eliminate Castaways above, which also finalizes."}
+              {league.consolation_points > 0 &&
+                ` Finalizing awards ${league.consolation_points} consolation pt${league.consolation_points !== 1 ? "s" : ""} per eliminated castaway.`}
+            </p>
+            {!isFinalized ? (
+              <form action={finalizeEpisodeAction}>
+                <input type="hidden" name="league_id" value={leagueId} />
+                <input type="hidden" name="episode_number" value={episodeNumber} />
+                <SubmitButton pendingText="Finalizing…" className="rounded bg-green-700 text-white px-4 py-2 text-sm font-medium hover:bg-green-800 transition-colors disabled:opacity-50 min-h-[44px]">
+                  Finalize Episode
+                </SubmitButton>
+              </form>
+            ) : (
+              <form action={unfinalizeEpisodeAction}>
+                <input type="hidden" name="league_id" value={leagueId} />
+                <input type="hidden" name="episode_number" value={episodeNumber} />
+                <SubmitButton pendingText="Un-finalizing…" className="rounded border border-amber-600 text-amber-700 px-4 py-2 text-sm font-medium hover:bg-amber-50 transition-colors disabled:opacity-50 min-h-[44px]">
+                  Un-finalize Episode
+                </SubmitButton>
+              </form>
+            )}
+          </div>
+        </section>
+        </EpisodeTabPanel>
+        </EpisodeTabs>
       </div>
     </AppShell>
   );

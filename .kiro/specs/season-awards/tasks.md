@@ -125,5 +125,16 @@ Tasks marked with `*` are optional property tests. Each task references the requ
     - _Requirements: 9.1, 9.4, 9.5, 11.2_
 
 - [x] 13. Final checkpoint
+
+- [x] 14. Season Recap page
+  - [x] 14.1 Pure helpers in `src/lib/season-recap.ts` with tests in `src/test/season-recap.test.ts`
+    - _Requirements: 10a.2, 10a.3, 10a.4_
+  - [x] 14.2 Animated SVG replay chart `src/components/season-replay-chart.tsx`
+    - _Requirements: 10a.3, 10a.4, 10a.5, 10a.6, 10a.7_
+  - [x] 14.3 Move the awards page to `/league/[id]/recap` with podium, chart, and awards; update the leaderboard link and revalidation paths
+    - _Requirements: 10a.1, 10a.2, 10a.8_
+  - [x] 14.5 Admin can preview the recap before completion (live awards, preview banner); remove the separate `/admin/awards` page
+    - _Requirements: 8.1, 8.2, 8.3_
+  - [ ] 14.4 Manual check: watch the replay on desktop and mobile after the season is complete
   - Run `npm run validate` (test, lint, build) and fix failures
   - Update `README.md` Features list with "Season awards"

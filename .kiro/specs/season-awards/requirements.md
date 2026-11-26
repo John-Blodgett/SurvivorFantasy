@@ -126,12 +126,9 @@ Design principles agreed with the product owner:
 
 #### Acceptance Criteria
 
-1. THE app SHALL provide an Admin_Preview page at `/league/[id]/admin/awards`, reachable from the admin hub page, accessible only to the League_Admin.
-2. THE Admin_Preview SHALL compute awards live from current data and SHALL NOT write to the database.
-3. FOR each award, THE Admin_Preview SHALL show its name, description, category, threshold text, and whether it would be given or is Unclaimed.
-4. FOR each award that would be given, THE Admin_Preview SHALL list every Winner with their statistic detail.
-5. FOR each award, THE Admin_Preview SHALL list up to the top 3 Candidates, marking those that do not meet the threshold as "below threshold".
-6. THE Admin_Preview SHALL show an empty state when the league has no finalized episodes.
+1. THE Admin_Preview SHALL be the Season Recap page (`/league/[id]/recap`) opened by the League_Admin before the season is complete, reachable from a "Season Recap Preview" tile on the admin hub. There is no separate awards preview page.
+2. WHILE the season is not complete, THE Season Recap page SHALL be accessible only to the League_Admin and SHALL show a banner saying players cannot see it yet.
+3. IN preview, THE awards section SHALL compute awards live from current data and SHALL NOT write to the database. It SHALL list every award that would be given, with its Winners and their statistic detail.
 
 ### Requirement 9: Save awards when the season completes
 
@@ -151,13 +148,28 @@ Design principles agreed with the product owner:
 
 #### Acceptance Criteria
 
-1. THE app SHALL provide a page at `/league/[id]/awards`. THE league navigation SHALL NOT include a link to it.
+1. THE app SHALL provide a page at `/league/[id]/recap`. THE league navigation SHALL NOT include a link to it.
 2. WHEN the league is complete, THE leaderboard page SHALL show a link to the awards page at the top of the page. WHILE the league is not complete, THE leaderboard page SHALL NOT show the link.
 3. WHILE the league is not complete, THE awards page SHALL redirect to the leaderboard page and SHALL NOT show any award results or counts.
-4. WHEN the league is complete, THE awards page SHALL show every Saved_Award that has at least one Winner, grouped by category, with the award name, description, Winner display names, and statistic detail.
+4. WHEN the league is complete, THE awards page SHALL show every Saved_Award that has at least one Winner as one flat list (no category headings), with the award name, description, Winner display names, and statistic detail.
 5. WHEN the league is complete and has no Saved_Awards, THE awards page SHALL show an empty-state message.
 6. THE awards page SHALL be readable only by league members.
 7. IF a saved `award_key` is not in the current catalogue, THEN THE awards page SHALL skip that row.
+
+### Requirement 10a: Season Recap page
+
+**User Story:** As a Player, I want a season recap that shows the final podium and replays the season, so that we can relive how it played out.
+
+#### Acceptance Criteria
+
+1. THE awards page SHALL be a Season Recap page at `/league/[id]/recap` with three sections in this order: Final Podium, the animated replay chart, and Season Awards.
+2. THE Final Podium SHALL be drawn as a podium: three stepped blocks in the order 2nd, 1st, 3rd (1st tallest), with the finishers standing on top of their step. It SHALL show each finisher's name, final points, and the castaways (and active ally) they ended the season with. Tied players SHALL share a step, and a place nobody holds SHALL show as an empty step.
+3. THE replay chart SHALL draw one colored line per player of cumulative points, starting at 0 before episode 1, and SHALL animate forward one episode at a time, moving each line smoothly from one episode total to the next (about 1.5 seconds per episode).
+4. THE replay chart SHALL show each player's name and running total at the tip of their line, and SHALL keep each player's color stable.
+5. THE replay chart SHALL start playing when scrolled into view and SHALL provide Play/Pause and Replay controls and an episode counter.
+6. WHEN a viewer taps a player's line, label, or legend entry, THE chart SHALL highlight that player and fade the others. The viewer's own line SHALL be drawn bolder.
+7. WHERE the viewer's device requests reduced motion, THE chart SHALL show the finished chart without animating.
+8. THE podium and chart SHALL be computed from current data with the same standings history used by the awards. THE replay chart SHALL NOT appear anywhere other than the Season Recap page.
 
 ### Requirement 11: Persistence and security
 
