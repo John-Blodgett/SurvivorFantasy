@@ -82,13 +82,14 @@ export async function loadAwardsInput(
     castaway_id: string;
     points: number;
     player_id: string | null;
+    deleted_rule_name: string | null;
     scoring_rules: { name: string } | null;
     episodes: { number: number };
   }>(() =>
     supabase
       .from("episode_events")
       .select(
-        "id, castaway_id, points, player_id, scoring_rules(name), episodes!inner(league_id, number, is_finalized)"
+        "id, castaway_id, points, player_id, deleted_rule_name, scoring_rules(name), episodes!inner(league_id, number, is_finalized)"
       )
       .eq("episodes.league_id", leagueId)
       .eq("episodes.is_finalized", true)
@@ -164,7 +165,7 @@ export async function loadAwardsInput(
       castaway_id: e.castaway_id,
       points: e.points,
       player_id: e.player_id,
-      rule_name: e.scoring_rules?.name ?? null,
+      rule_name: e.scoring_rules?.name ?? e.deleted_rule_name ?? null,
     })),
     assignments,
     claims,

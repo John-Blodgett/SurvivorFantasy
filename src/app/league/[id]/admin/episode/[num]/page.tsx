@@ -76,7 +76,7 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
   if (episode) {
     const { data: rawEvents } = await supabase
       .from("episode_events")
-      .select("id, episode_id, castaway_id, scoring_rule_id, points, created_at, castaways(name), scoring_rules(name)")
+      .select("id, episode_id, castaway_id, scoring_rule_id, deleted_rule_name, points, created_at, castaways(name), scoring_rules(name)")
       .eq("episode_id", episode.id)
       .order("created_at", { ascending: false });
 
@@ -85,7 +85,10 @@ export default async function AdminEpisodePage({ params, searchParams }: PagePro
       castaway_id: e.castaway_id as string, scoring_rule_id: e.scoring_rule_id as string | null,
       points: e.points as number, created_at: e.created_at as string,
       castaway_name: (e.castaways as Record<string, unknown> | null)?.name as string ?? "Unknown",
-      rule_name: (e.scoring_rules as Record<string, unknown> | null)?.name as string ?? null,
+      rule_name:
+        ((e.scoring_rules as Record<string, unknown> | null)?.name as string | undefined) ??
+        (e.deleted_rule_name as string | null | undefined) ??
+        null,
     }));
   }
 

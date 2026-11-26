@@ -72,7 +72,7 @@ export default async function EpisodeRecapPage({ params }: PageProps) {
   const { data: rawEvents } = await supabase
     .from("episode_events")
     .select(
-      "id, episode_id, castaway_id, scoring_rule_id, points, created_at, castaways(id, name), scoring_rules(name)"
+      "id, episode_id, castaway_id, scoring_rule_id, deleted_rule_name, points, created_at, castaways(id, name), scoring_rules(name)"
     )
     .eq("episode_id", episode.id)
     .order("created_at", { ascending: true });
@@ -100,7 +100,9 @@ export default async function EpisodeRecapPage({ params }: PageProps) {
     castaway_name:
       (e.castaways as Record<string, unknown> | null)?.name as string ?? "Unknown",
     scoring_rule_name:
-      (e.scoring_rules as Record<string, unknown> | null)?.name as string ?? null,
+      ((e.scoring_rules as Record<string, unknown> | null)?.name as string | undefined) ??
+      (e.deleted_rule_name as string | null | undefined) ??
+      null,
     points: e.points as number,
     benefiting_player_name: castawayOwnerMap.get(e.castaway_id as string) ?? null,
   }));
