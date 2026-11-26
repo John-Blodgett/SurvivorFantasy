@@ -13,7 +13,7 @@ import {
   type CastawayOption,
 } from "@/lib/challenges";
 import { buildTribeEvents } from "@/lib/tribes";
-import { buildBatchEvents } from "@/lib/scoring";
+import { buildBatchEvents, parseEventQuantity, MAX_EVENT_QUANTITY } from "@/lib/scoring";
 import { toPacificISO } from "@/lib/timezone";
 import { requireLeagueAdmin } from "../../helpers";
 
@@ -50,9 +50,13 @@ export async function addEpisodeEventAction(formData: FormData) {
   const castawayId = formData.get("castaway_id") as string;
   const ruleId = formData.get("rule_id") as string;
   const points = parseInt(formData.get("points") as string, 10);
+  const quantity = parseEventQuantity(formData.get("quantity") as string | null);
 
   if (!castawayId || !ruleId || isNaN(points) || isNaN(episodeNumber)) {
     redirect(`${basePath}?error=${encodeURIComponent("Invalid event data.")}`);
+  }
+  if (quantity === null) {
+    redirect(`${basePath}?error=${encodeURIComponent(`Times must be a whole number from 1 to ${MAX_EVENT_QUANTITY}.`)}`);
   }
 
   const episodeId = await ensureEpisode(supabase, leagueId, episodeNumber);
@@ -64,9 +68,10 @@ export async function addEpisodeEventAction(formData: FormData) {
     redirect(`${basePath}?error=${encodeURIComponent("Cannot add events to a finalized episode.")}`);
   }
 
-  const { error } = await supabase.from("episode_events").insert({
+  const rows = Array.from({ length: quantity }, () => ({
     episode_id: episodeId, castaway_id: castawayId, scoring_rule_id: ruleId, points,
-  });
+  }));
+  const { error } = await supabase.from("episode_events").insert(rows);
 
   if (error) {
     redirect(`${basePath}?error=${encodeURIComponent("Failed to record event.")}`);

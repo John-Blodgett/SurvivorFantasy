@@ -3,6 +3,8 @@ import * as fc from "fast-check";
 import {
   computePlayerScore,
   buildBatchEvents,
+  parseEventQuantity,
+  MAX_EVENT_QUANTITY,
   type TeamAssignment,
   type EpisodeEvent,
   type EliminatedCastaway,
@@ -487,5 +489,27 @@ describe("computeAllyPoints", () => {
       ),
       { numRuns: 50 }
     );
+  });
+});
+
+describe("parseEventQuantity", () => {
+  it("defaults blank/missing to 1", () => {
+    expect(parseEventQuantity(undefined)).toBe(1);
+    expect(parseEventQuantity(null)).toBe(1);
+    expect(parseEventQuantity("  ")).toBe(1);
+  });
+
+  it("accepts integers from 1 to MAX_EVENT_QUANTITY", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 1, max: MAX_EVENT_QUANTITY }), (n) => {
+        expect(parseEventQuantity(String(n))).toBe(n);
+      })
+    );
+  });
+
+  it("rejects zero, negatives, decimals, non-numeric, and values over the max", () => {
+    for (const bad of ["0", "-3", "2.5", "abc", "1e2", String(MAX_EVENT_QUANTITY + 1)]) {
+      expect(parseEventQuantity(bad)).toBeNull();
+    }
   });
 });

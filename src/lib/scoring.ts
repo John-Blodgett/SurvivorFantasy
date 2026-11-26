@@ -324,3 +324,17 @@ export function resolveAllyEndEpisode(
   }
   return result;
 }
+
+export const MAX_EVENT_QUANTITY = 100;
+
+/**
+ * Parses the "times" value for recording one event repeatedly.
+ * Returns an integer in [1, MAX_EVENT_QUANTITY], or null if invalid.
+ * A missing/blank value defaults to 1.
+ */
+export function parseEventQuantity(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw.trim() === "") return 1;
+  if (!/^\d+$/.test(raw.trim())) return null;
+  const n = parseInt(raw.trim(), 10);
+  return n >= 1 && n <= MAX_EVENT_QUANTITY ? n : null;
+}

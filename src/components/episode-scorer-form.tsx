@@ -6,6 +6,7 @@ import SubmitButton from "./submit-button";
 import type { Castaway } from "@/lib/castaways";
 import type { ScoringRule } from "@/lib/scoring-rules";
 import Link from "next/link";
+import { parseEventQuantity, MAX_EVENT_QUANTITY } from "@/lib/scoring";
 
 interface EpisodeScorerFormProps {
   leagueId: string;
@@ -22,6 +23,7 @@ export default function EpisodeScorerForm({
 }: EpisodeScorerFormProps) {
   const [selectedCastawayId, setSelectedCastawayId] = useState<string>("");
   const [selectedRuleId, setSelectedRuleId] = useState<string>("");
+  const [quantity, setQuantity] = useState<string>("1");
 
   if (castaways.length === 0) {
     return (
@@ -48,6 +50,7 @@ export default function EpisodeScorerForm({
   }
 
   const selectedRule = rules.find((r) => r.id === selectedRuleId);
+  const qty = parseEventQuantity(quantity);
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-4">
@@ -130,6 +133,26 @@ export default function EpisodeScorerForm({
           <input type="hidden" name="rule_id" value={selectedRuleId} />
         </fieldset>
 
+        {/* Quantity */}
+        <div className="flex items-center gap-2">
+          <label htmlFor="quantity" className="text-sm font-medium">
+            Times
+          </label>
+          <input
+            id="quantity"
+            name="quantity"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={MAX_EVENT_QUANTITY}
+            step={1}
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            aria-label="Number of times to record this event"
+            className="w-20 rounded border border-input bg-background px-2 py-2 text-sm tabular-nums min-h-[44px]"
+          />
+        </div>
+
         {/* Preview */}
         {selectedCastawayId && selectedRule && (
           <div className="rounded bg-muted px-3 py-2 text-sm">
@@ -143,17 +166,17 @@ export default function EpisodeScorerForm({
               }`}
             >
               ({selectedRule.points > 0 ? "+" : ""}
-              {selectedRule.points} pts)
+              {selectedRule.points} pts{qty !== null && qty > 1 ? ` × ${qty} = ${selectedRule.points * qty} pts` : ""})
             </span>
           </div>
         )}
 
         <SubmitButton
           pendingText="Recording…"
-          disabled={!selectedCastawayId || !selectedRuleId}
+          disabled={!selectedCastawayId || !selectedRuleId || qty === null}
           className="w-full rounded bg-primary text-primary-foreground px-4 py-3 text-sm font-semibold hover:bg-primary/90 transition-colors min-h-[44px] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Record Event
+          {qty !== null && qty > 1 ? `Record Event × ${qty}` : "Record Event"}
         </SubmitButton>
       </form>
     </div>
