@@ -99,6 +99,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       points,
       player_id,
       scoring_rule_id,
+      deleted_rule_name,
       castaway_id,
       created_at,
       episodes!inner(number, league_id, is_finalized),
@@ -180,6 +181,7 @@ export default async function ScoringLogPage({ params, searchParams }: PageProps
       // elimination) or events whose scoring rule was later deleted.
       rule_name:
         (rule?.name as string | undefined) ??
+        (e.deleted_rule_name as string | null | undefined) ??
         (castawayMap.get(castawayId)?.eliminated_episode != null &&
         (episode.number as number) > castawayMap.get(castawayId)!.eliminated_episode!
           ? "Consolation"
