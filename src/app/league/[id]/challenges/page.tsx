@@ -15,6 +15,11 @@ import {
   type ChallengeType,
   type CastawayOption,
 } from "@/lib/challenges";
+import {
+  buildRevealedAnswers,
+  type AnswerSubmission,
+  type RevealedAnswer,
+} from "@/lib/challenge-answers";
 
 interface PageProps {
   params: { id: string };
@@ -102,6 +107,47 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
   );
 
   const now = new Date();
+
+  // Everyone's answers are revealed only once a challenge is closed
+  // (deadline passed or episode finalized). Only closed challenges are queried,
+  // so open answers are never sent to the page.
+  const closedChallengeIds = new Set(
+    challenges
+      .filter((c) => now > new Date(c.deadline) || c.is_episode_finalized)
+      .map((c) => c.id)
+  );
+
+  let revealedAnswers = new Map<string, RevealedAnswer[]>();
+  if (closedChallengeIds.size > 0) {
+    const [{ data: allSubs }, { data: members }] = await Promise.all([
+      supabase
+        .from("challenge_submissions")
+        .select("challenge_id, player_id, response, is_correct")
+        .in("challenge_id", Array.from(closedChallengeIds)),
+      supabase
+        .from("league_members")
+        .select("player_id, profiles(display_name)")
+        .eq("league_id", leagueId),
+    ]);
+
+    const playerNames = new Map(
+      (members ?? []).map((m) => [
+        m.player_id as string,
+        (m.profiles as unknown as { display_name: string } | null)?.display_name ?? "Unknown",
+      ])
+    );
+    const challengeTypes = new Map(challenges.map((c) => [c.id, c.challenge_type]));
+
+    revealedAnswers = buildRevealedAnswers(
+      (allSubs ?? []) as AnswerSubmission[],
+      closedChallengeIds,
+      playerNames,
+      (challengeId, response) =>
+        challengeTypes.get(challengeId) === "survivor_dropdown"
+          ? resolveDropdownDisplay(response, castaways)
+          : response
+    );
+  }
 
   return (
     <AppShell
@@ -319,6 +365,40 @@ export default async function ChallengesPage({ params, searchParams }: PageProps
                     <p className="text-xs text-muted-foreground border-t border-border pt-2">
                       You did not submit a response before the deadline.
                     </p>
+                  )}
+
+                  {/* Everyone's answers, collapsed by default, closed challenges only */}
+                  {isPastDeadline && (revealedAnswers.get(challenge.id)?.length ?? 0) > 0 && (
+                    <details className="group border-t border-border pt-2">
+                      <summary className="flex cursor-pointer select-none items-center justify-between text-xs font-medium text-muted-foreground list-none hover:text-foreground">
+                        <span>Everyone&apos;s answers ({revealedAnswers.get(challenge.id)!.length})</span>
+                        <span className="group-open:hidden">Show</span>
+                        <span className="hidden group-open:inline">Hide</span>
+                      </summary>
+                      <ul className="mt-2 divide-y divide-border">
+                        {revealedAnswers.get(challenge.id)!.map((a) => (
+                          <li
+                            key={a.player_id}
+                            className={`flex items-start justify-between gap-3 py-1.5 text-sm ${
+                              a.player_id === user.id ? "font-medium" : ""
+                            }`}
+                          >
+                            <span className="shrink-0 text-muted-foreground">
+                              {a.player_id === user.id ? "You" : a.player_name}
+                            </span>
+                            <span className="flex items-start gap-1.5 text-right min-w-0">
+                              <span className="break-words">{a.response}</span>
+                              {a.is_correct === true && (
+                                <span className="text-green-700" aria-label="Correct">✓</span>
+                              )}
+                              {a.is_correct === false && (
+                                <span className="text-destructive" aria-label="Incorrect">✗</span>
+                              )}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   )}
                 </div>
               );
