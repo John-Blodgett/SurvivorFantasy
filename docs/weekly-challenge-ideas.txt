@@ -1,0 +1,163 @@
+WEEKLY CHALLENGE IDEAS
+======================
+
+Reference list for creating weekly challenges by hand.
+
+Type key:  MC = multiple choice, DD = castaway dropdown, FR = free response
+Points:    3 = most players should get it, 5 = roughly a coin flip, 7 = hard
+
+Left out on purpose because they are easy to spoil: who is voted out, who wins
+the season, anything about the first scene, who wins the immunity challenge,
+which tribe loses, and who gets the first vote reveal.
+
+Words in [brackets] are placeholders to fill in.
+
+
+PAST CHALLENGES (from this league)
+----------------------------------
+
+Will anyone cry?
+  MC: Yes / No | 3 pts
+  Includes next time on survivor scenes.
+
+How many times will "[phrase]" be said?
+  MC: 0-1 / 2-3 / 4-5 / 6-7 / 8+ | 5 pts
+  Has to be the full phrase but includes anytime they are said together for
+  the full episode.
+
+Who will be chosen to visit the opposing tribe?
+  DD | 5 pts
+  2 correct answers. One from each tribe.
+
+Who will get the most confessionals?
+  DD | 5 pts
+  Ties will also count as wins.
+
+Who says the quote that is the name of the next episode?
+  DD | 5 pts
+  The name of the episode is "[episode name]".
+
+How many ads will there be to apply to Survivor tonight?
+  MC: 0 / 1 / 2 / 3 / 4 / 5 / 6 / 7 / 8 | 5 pts
+
+Who is going to be first to LOSE the individual immunity challenge?
+  DD | 5 pts
+
+Other than fish, whales, and birds, name one animal that will be shown in the
+next episode.
+  FR | 5 pts
+  Name a general kind of animal, like "snake," "crab," or "dolphin." You don't
+  need the specific species. Group names like "bug," "reptile," or "insect" are
+  too broad and won't count. Fish (anything with gills), whales, and all birds
+  are off limits. The animal has to be clearly visible on screen in the episode
+  itself. Insects count if you can clearly see them. An animal that is only
+  shown after it has been cooked doesn't count.
+
+If the coin is being flipped, who's flipping it?
+  DD | 3 pts
+  (Specific to the million dollar coin twist.)
+
+Is the million dollar coin being flipped?
+  MC: Yes / No | 3 pts
+  Only counts if a contestant chooses to flip it themselves. If it's just
+  flipped for fun after, it doesn't count.
+  (Specific to the million dollar coin twist.)
+
+Will the individual immunity challenge last over or under 90 minutes?
+  MC: Over 90 minutes / Under 90 minutes | 5 pts
+  The over will only count if it's confirmed that the challenge went over that
+  time limit. Otherwise the under will win. It only counts if the actual
+  episode confirms this. Does not count if it's confirmed from bonus scenes or
+  confirmed after the fact by a player.
+
+
+EPISODE EVENTS (yes / no)
+-------------------------
+
+Will an idol or advantage be played at tribal council?
+  MC: Yes / No | 5 pts
+
+Will a castaway find a hidden idol on screen?
+  MC: Yes / No | 5 pts
+
+Will anyone quit or be medically evacuated?
+  MC: Yes / No | 7 pts
+
+Will there be a tied vote at tribal council?
+  MC: Yes / No | 7 pts
+
+Will anyone catch a fish or other food on screen?
+  MC: Yes / No | 5 pts
+  The catch itself must be shown. Seeing a rod, net, or bait is not enough.
+
+Will there be a rain scene?
+  MC: Yes / No | 5 pts
+  Rain must be visibly falling on screen.
+
+Will a castaway make fire on screen?
+  MC: Yes / No | 5 pts
+  A castaway visibly uses flint or another tool to start a fire.
+
+Will Jeff announce a new twist?
+  MC: Yes / No | 5 pts
+  A new rule or advantage is announced by Jeff during the episode.
+
+
+COUNTS
+------
+
+How many castaways will receive votes at tribal council?
+  MC: 1 / 2 / 3 / 4+ | 5 pts
+
+How many confessionals will the top castaway get?
+  MC: 3 or fewer / 4-5 / 6-7 / 8+ | 7 pts
+  Uses the confessional count tallied by the league admin.
+
+How many times will Jeff say "the tribe has spoken"?
+  MC: 0 / 1 / 2+ | 3 pts
+
+
+WHO IS IT (castaway dropdown)
+-----------------------------
+
+Who gets the first confessional of the episode?
+  DD | 7 pts
+
+Who gets the last confessional of the episode?
+  DD | 7 pts
+
+Who will Jeff speak to first at tribal council?
+  DD | 7 pts
+  The first castaway Jeff addresses directly after tribal council begins.
+
+Who finds a hidden idol, if one is found?
+  DD | 7 pts
+  If no idol is found on screen, no answer is correct.
+
+Who is shown making fire first, if anyone is?
+  DD | 7 pts
+  If nobody makes fire on screen, no answer is correct.
+
+Who is the last castaway on screen before the closing credits?
+  DD | 7 pts
+
+Who wears a hat or bandana at tribal council?
+  DD | 5 pts
+  Worn on the head during the tribal council scene.
+
+
+TRIVIA
+------
+
+What kind of immunity challenge will it be?
+  MC: Endurance / Puzzle / Obstacle course / Balance / Other | 5 pts
+  Based on what Jeff says or what is clearly shown. "Other" covers anything
+  else.
+
+What will the reward be?
+  MC: Food / Comfort items / Journey / Other | 5 pts
+
+Name one food that will be shown on screen.
+  FR | 5 pts
+  Name a general food, like "rice," "coconut," or "fish." It must be clearly
+  visible in the episode.
